@@ -4,7 +4,8 @@ from pathlib import Path
 
 import re
 
-from PyInstaller.utils.hooks import collect_submodules, copy_metadata
+from PyInstaller.utils.hooks import (collect_data_files, collect_dynamic_libs, collect_submodules,
+                                     copy_metadata)
 
 ROOT = Path(SPECPATH).parent
 PKG = ROOT / "descargo"
@@ -19,8 +20,11 @@ version_file.write_text(
     .replace("{vt}", str(parts[:4])), encoding="utf-8")
 
 # copy_metadata: permite saber qué versión del motor trae el instalador
-datas = [(str(PKG / "assets"), "descargo/assets")] + copy_metadata("yt-dlp")
+datas = ([(str(PKG / "assets"), "descargo/assets")] + copy_metadata("yt-dlp")
+         + collect_data_files("curl_cffi") + collect_data_files("certifi"))
 binaries = [(str(p), "descargo/bin") for p in (PKG / "bin").glob("*.exe")]
+# curl_cffi: biblioteca nativa para presentarse como navegador real (TikTok la exige)
+binaries += collect_dynamic_libs("curl_cffi")
 
 a = Analysis(
     [str(ROOT / "run.py")],
@@ -28,7 +32,8 @@ a = Analysis(
     binaries=binaries,
     datas=datas,
     hiddenimports=collect_submodules("yt_dlp.extractor") + collect_submodules("yt_dlp.postprocessor")
-    + collect_submodules("mutagen"),
+    + collect_submodules("mutagen") + collect_submodules("curl_cffi")
+    + ["yt_dlp.networking._curlcffi", "yt_dlp.networking._requests", "yt_dlp.networking._websockets"],
     excludes=["tkinter", "PySide6.QtWebEngineCore", "PySide6.QtWebEngineWidgets", "PySide6.Qt3DCore",
               "PySide6.QtQuick", "PySide6.QtQml", "PySide6.QtMultimedia", "PySide6.QtCharts",
               "PySide6.QtDataVisualization", "PySide6.QtPdf"],

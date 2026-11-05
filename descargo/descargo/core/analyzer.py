@@ -25,6 +25,11 @@ PLATFORM_NAMES = {
 
 _FRIENDLY_ERRORS = [
     (("unsupported url",), "No se encontró ningún video o audio en esta página."),
+    (("unexpected response from webpage request", "unable to extract universal data",
+      "unable to extract challenge data", "impersonat"),
+     "La plataforma bloqueó la solicitud.\n"
+     "Abre «Actualizaciones» → «Actualizar motor ahora» y vuelve a intentarlo. "
+     "Si continúa, espera unos minutos: puede ser un bloqueo temporal."),
     (("sign in to confirm", "not a bot"),
      "La plataforma pide verificar que no eres un robot.\n"
      "Activa «Usar sesión del navegador» en Ajustes → Red e inténtalo de nuevo."),

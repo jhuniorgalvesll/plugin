@@ -1,6 +1,14 @@
 """Novedades de cada versión (se muestran en la app y en GitHub Releases)."""
 
 CHANGELOG: list[tuple[str, list[str]]] = [
+    ("1.2.2", [
+        "🎵 TikTok vuelve a funcionar: DescarGO ahora se presenta como un navegador real "
+        "(Chrome/Safari), como exige TikTok. Antes fallaba con «Unexpected response from "
+        "webpage request».",
+        "🌐 Más sitios compatibles: se incluyen los componentes completos del motor "
+        "(conexiones modernas, compresión y certificados actualizados).",
+        "💬 Mensaje claro cuando una plataforma bloquea la solicitud, con la solución.",
+    ]),
     ("1.2.1", [
         "🏷️ Los archivos se guardan con el título original del video en todas las plataformas. "
         "En Instagram (que solo dice «Video by usuario») se usa el texto real de la publicación; "

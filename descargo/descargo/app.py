@@ -10,13 +10,41 @@ from PySide6.QtWidgets import QApplication, QDialog
 from . import APP_ID, APP_NAME, APP_VERSION, COPYRIGHT_OWNER
 from .config import Settings
 from .core.library import Library
-from .utils import IS_WINDOWS
+from .utils import IS_WINDOWS, app_data_dir
+
+
+def diagnostics() -> str:
+    """«DescarGO --diagnostico»: muestra qué componentes del motor están disponibles."""
+    from .core import updater
+    lines = [f"{APP_NAME} {APP_VERSION}",
+             f"Motor: {updater.current_engine_version()} ({updater.engine_source()})"]
+    try:
+        import curl_cffi
+        lines.append(f"curl_cffi: {curl_cffi.__version__}")
+    except Exception as exc:
+        lines.append(f"curl_cffi: NO DISPONIBLE ({exc})")
+    try:
+        import yt_dlp
+        with yt_dlp.YoutubeDL({"quiet": True}) as ydl:
+            targets = list(ydl._get_available_impersonate_targets())
+        lines.append(f"Navegadores simulables: {len(targets)}")
+    except Exception as exc:
+        lines.append(f"Navegadores simulables: error ({exc})")
+    return "\n".join(lines)
 
 
 def main() -> int:
     # Usa el motor de descarga actualizado (si existe) antes de cualquier import de yt_dlp.
     from .core.updater import activate_engine
     activate_engine()
+    if "--diagnostico" in sys.argv:
+        report = diagnostics()
+        print(report)
+        try:
+            (app_data_dir() / "diagnostico.txt").write_text(report, encoding="utf-8")
+        except OSError:
+            pass
+        return 0
 
     if IS_WINDOWS:
         # Icono propio en la barra de tareas de Windows.
