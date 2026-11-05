@@ -22,6 +22,8 @@ from .security import (CLEAN, MEDIA_EXTS, SUSPICIOUS, THREAT, ScanReport,
 
 # Archivos temporales del motor que nunca se entregan al usuario.
 _TEMP_SUFFIXES = (".part", ".ytdl", ".temp", ".tmp")
+# Miniaturas sueltas (la portada ya va incrustada): se descartan, nunca se entregan.
+_IMAGE_SUFFIXES = (".jpg", ".jpeg", ".png", ".webp", ".gif")
 
 STATUS_DONE = "done"
 STATUS_SUSPICIOUS = "suspicious"
@@ -60,6 +62,7 @@ class JobSettings:
     virustotal_key: str = ""
     threat_action: str = "delete"
     start_delay: float = 0.0  # pausa antes de empezar (elementos de una lista)
+    embed_thumbnail: bool = True  # portada incrustada en MP3/M4A/MP4…
 
 
 ProgressCb = Callable[[dict], None]
@@ -136,37 +139,52 @@ class DownloadJob:
             return self._stopped()
 
         self.workdir.mkdir(parents=True, exist_ok=True)
-        opts = build_ydl_options(
-            req, str(self.workdir),
-            ffmpeg_dir=self.settings.ffmpeg_dir,
-            cookies_browser=self.settings.cookies_browser,
-            rate_limit_kb=self.settings.rate_limit_kb,
-            progress_hook=self._progress_hook,
-            postprocessor_hook=self._pp_hook,
-        )
         self.on_progress({"phase": "starting"})
-
         import yt_dlp
-        try:
-            with yt_dlp.YoutubeDL(opts) as ydl:
-                info = ydl.extract_info(req.url, download=False)
-                policy.check_info(ydl.sanitize_info(info) or {})
-                if self.stop_requested:
-                    raise yt_dlp.utils.DownloadCancelled("detenido")
-                ydl.process_ie_result(info, download=True)
-        except policy.BlockedContentError as exc:
-            self.cleanup()
-            return JobResult(STATUS_BLOCKED, message=str(exc))
-        except yt_dlp.utils.DownloadCancelled:
-            return self._stopped()
-        except Exception as exc:
-            if self.stop_requested:
+
+        cover = self.settings.embed_thumbnail
+        while True:
+            try:
+                self._download(cover)
+            except policy.BlockedContentError as exc:
+                self.cleanup()
+                return JobResult(STATUS_BLOCKED, message=str(exc))
+            except yt_dlp.utils.DownloadCancelled:
                 return self._stopped()
-            return self._handle_failure(friendly_error(str(exc)))
+            except Exception as exc:
+                if self.stop_requested:
+                    return self._stopped()
+                if cover:
+                    # la portada nunca debe arruinar una descarga: se repite una vez sin ella
+                    # (formato sin soporte de carátula, miniatura rota o inaccesible…)
+                    cover = False
+                    self.cleanup()
+                    self.workdir.mkdir(parents=True, exist_ok=True)
+                    continue
+                return self._handle_failure(friendly_error(str(exc)))
+            break
 
         if self.stop_requested:
             return self._stopped()
         return self._scan_and_deliver()
+
+    def _download(self, cover: bool) -> None:
+        import yt_dlp
+        opts = build_ydl_options(
+            self.request, str(self.workdir),
+            ffmpeg_dir=self.settings.ffmpeg_dir,
+            cookies_browser=self.settings.cookies_browser,
+            rate_limit_kb=self.settings.rate_limit_kb,
+            embed_thumbnail=cover,
+            progress_hook=self._progress_hook,
+            postprocessor_hook=self._pp_hook,
+        )
+        with yt_dlp.YoutubeDL(opts) as ydl:
+            info = ydl.extract_info(self.request.url, download=False)
+            policy.check_info(ydl.sanitize_info(info) or {})
+            if self.stop_requested:
+                raise yt_dlp.utils.DownloadCancelled("detenido")
+            ydl.process_ie_result(info, download=True)
 
     def _handle_failure(self, message: str) -> JobResult:
         """Si la descarga falla, igual se analiza lo que llegó: nunca queda un archivo sin revisar."""
@@ -190,8 +208,12 @@ class DownloadJob:
     def _collect_files(self) -> list[Path]:
         files = []
         for p in sorted(self.workdir.iterdir()) if self.workdir.exists() else []:
-            if p.is_file() and not p.name.endswith(_TEMP_SUFFIXES):
-                files.append(p)
+            if not p.is_file() or p.name.endswith(_TEMP_SUFFIXES):
+                continue
+            if p.suffix.lower() in _IMAGE_SUFFIXES:
+                p.unlink(missing_ok=True)
+                continue
+            files.append(p)
         return files
 
     def _destination_dir(self) -> Path:

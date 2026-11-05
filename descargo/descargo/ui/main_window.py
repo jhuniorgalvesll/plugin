@@ -6,16 +6,18 @@ import uuid
 from pathlib import Path
 
 from PySide6.QtCore import Qt, QThreadPool, QTimer, QUrl
+from datetime import date
+
 from PySide6.QtGui import QDesktopServices, QGuiApplication, QKeySequence, QShortcut
-from PySide6.QtWidgets import (QAbstractItemView, QButtonGroup, QFrame, QHBoxLayout, QHeaderView, QLabel,
+from PySide6.QtWidgets import (QAbstractItemView, QButtonGroup, QFrame, QMenu, QSystemTrayIcon, QHBoxLayout, QHeaderView, QLabel,
                                QLineEdit, QMainWindow, QMessageBox, QPushButton, QScrollArea,
                                QStackedWidget, QTableWidget, QTableWidgetItem, QVBoxLayout,
                                QWidget)
 
 from .. import APP_NAME, APP_TAGLINE, APP_VERSION, COPYRIGHT_YEAR
 from ..config import Settings
-from ..core import policy
-from ..core.downloader import (STATUS_CANCELLED, STATUS_DONE, STATUS_PAUSED, DownloadJob,
+from ..core import policy, updater
+from ..core.downloader import (STATUS_CANCELLED, STATUS_DONE, STATUS_PAUSED, STATUS_THREAT, DownloadJob,
                                JobResult, JobSettings, release_from_quarantine)
 from ..core.library import Library
 from ..core.models import DownloadRequest, MediaInfo
@@ -23,8 +25,9 @@ from ..core.security import VERDICT_LABELS
 from ..utils import extract_urls, find_ffmpeg_dir, human_size
 from .dialogs import AboutDialog, CoffeeDialog, SettingsDialog
 from .options_dialog import OptionsDialog
-from .widgets import AnalyzingItem, DownloadItem, brand_label, logo_pixmap
-from .workers import AnalyzeWorker, DownloadWorker
+from .updates_dialog import UpdatesDialog, check_and_install_engine
+from .widgets import AnalyzingItem, DownloadItem, app_icon, brand_label, logo_pixmap
+from .workers import AnalyzeWorker, DownloadWorker, TaskWorker
 
 _STATUS_TEXT = {
     "done": "Completado", "suspicious": "En cuarentena", "threat": "Amenaza",
@@ -66,6 +69,7 @@ class MainWindow(QMainWindow):
         self.page_title = QLabel("Descargas")
         self.page_title.setObjectName("PageTitle")
         root.addWidget(self.page_title)
+        root.addWidget(self._update_banner())
         root.addWidget(self._url_card())
 
         self.pages = QStackedWidget()
@@ -78,6 +82,10 @@ class MainWindow(QMainWindow):
         status = self.statusBar()
         status.addPermanentWidget(QLabel(f"{APP_NAME} v{APP_VERSION}"))
         self._show_ready_message()
+        self.app_update: updater.AppUpdate | None = None
+        self._tasks: list[TaskWorker] = []
+        self._setup_tray()
+        QTimer.singleShot(2500, self._startup_checks)
 
         QGuiApplication.clipboard().dataChanged.connect(self._clipboard_changed)
         QShortcut(QKeySequence.Paste, self, activated=self._paste_shortcut)
@@ -112,9 +120,11 @@ class MainWindow(QMainWindow):
         self.nav_group.idClicked.connect(self.show_page)
         nav_settings = self._nav_button("⚙   Ajustes")
         nav_settings.clicked.connect(self.open_settings)
+        self.nav_updates = self._nav_button("🔄   Actualizaciones")
+        self.nav_updates.clicked.connect(self.open_updates)
         nav_about = self._nav_button("ⓘ   Acerca de")
         nav_about.clicked.connect(lambda: AboutDialog(self).exec())
-        for b in (self.nav_downloads, self.nav_history, nav_settings, nav_about):
+        for b in (self.nav_downloads, self.nav_history, nav_settings, self.nav_updates, nav_about):
             lay.addWidget(b)
         lay.addStretch(1)
 
@@ -134,6 +144,25 @@ class MainWindow(QMainWindow):
         rights.setAlignment(Qt.AlignCenter)
         lay.addWidget(rights)
         return bar
+
+    def _update_banner(self) -> QFrame:
+        self.banner = QFrame()
+        self.banner.setObjectName("NoticeCard")
+        row = QHBoxLayout(self.banner)
+        row.setContentsMargins(16, 10, 10, 10)
+        self.banner_text = QLabel("")
+        self.banner_text.setTextFormat(Qt.RichText)
+        row.addWidget(self.banner_text, 1)
+        see = QPushButton("Ver novedades")
+        see.setObjectName("Primary")
+        see.clicked.connect(self.open_updates)
+        later = QPushButton("Omitir esta versión")
+        later.setObjectName("Ghost")
+        later.clicked.connect(self._skip_update)
+        row.addWidget(later)
+        row.addWidget(see)
+        self.banner.hide()
+        return self.banner
 
     def _nav_button(self, text: str, checkable: bool = False) -> QPushButton:
         btn = QPushButton(text)
@@ -390,6 +419,7 @@ class MainWindow(QMainWindow):
             virustotal_key=s.virustotal_key if s.virustotal_enabled else "",
             threat_action=s.threat_action,
             start_delay=delay,
+            embed_thumbnail=s.embed_thumbnail,
         )
 
     def _start_worker(self, req: DownloadRequest, delay: float = 0) -> None:
@@ -427,6 +457,9 @@ class MainWindow(QMainWindow):
                 verdict=result.verdict if result.reports else "")
         if result.status == STATUS_DONE:
             self.statusBar().showMessage(f"✅ «{req.title}» descargado y verificado.", 6000)
+            self.notify("✅ Descarga lista", f"{req.title}\nVerificada: sin amenazas.")
+        elif result.status == STATUS_THREAT:
+            self.notify("❌ Amenaza bloqueada", f"{req.title}\n{result.message}", warning=True)
         self._update_counts()
 
     def pause_job(self, job_id: str) -> None:
@@ -546,6 +579,85 @@ class MainWindow(QMainWindow):
         folder.mkdir(parents=True, exist_ok=True)
         QDesktopServices.openUrl(QUrl.fromLocalFile(str(folder)))
 
+    # -- bandeja del sistema y notificaciones -------------------------------------
+    def _setup_tray(self) -> None:
+        self.tray: QSystemTrayIcon | None = None
+        if not QSystemTrayIcon.isSystemTrayAvailable():
+            return
+        self.tray = QSystemTrayIcon(app_icon(), self)
+        self.tray.setToolTip(f"{APP_NAME} — {APP_TAGLINE}")
+        menu = QMenu(self)
+        menu.addAction("Abrir DescarGO", self._bring_to_front)
+        menu.addAction("Abrir carpeta de descargas", lambda: self._open_folder(Path(self.settings.download_dir)))
+        menu.addSeparator()
+        menu.addAction("Salir", self.close)
+        self.tray.setContextMenu(menu)
+        self.tray.activated.connect(lambda reason: reason == QSystemTrayIcon.Trigger and self._bring_to_front())
+        self.tray.messageClicked.connect(self._bring_to_front)
+        self.tray.show()
+
+    def _bring_to_front(self) -> None:
+        self.showNormal()
+        self.raise_()
+        self.activateWindow()
+
+    def notify(self, title: str, message: str, warning: bool = False) -> None:
+        """Aviso de Windows cuando la ventana no está a la vista."""
+        if not self.settings.notifications or not self.tray:
+            return
+        if self.isActiveWindow() and not self.isMinimized():
+            return
+        icon = QSystemTrayIcon.Warning if warning else QSystemTrayIcon.Information
+        self.tray.showMessage(title, message, icon, 6000)
+
+    # -- actualizaciones ---------------------------------------------------------
+    def _run_task(self, worker: TaskWorker) -> TaskWorker:
+        worker.setAutoDelete(False)
+        self._tasks.append(worker)
+        worker.signals.finished.connect(lambda _r, w=worker: self._tasks.remove(w) if w in self._tasks else None)
+        worker.signals.failed.connect(lambda _m, w=worker: self._tasks.remove(w) if w in self._tasks else None)
+        self.analyze_pool.start(worker)
+        return worker
+
+    def _startup_checks(self) -> None:
+        today = date.today().isoformat()
+        if self.settings.check_app_updates and self.settings.last_app_check != today:
+            worker = self._run_task(TaskWorker(updater.check_app_update))
+            worker.signals.finished.connect(self._app_update_found)
+        if self.settings.auto_update_engine and self.settings.last_engine_check != today:
+            worker = self._run_task(TaskWorker(check_and_install_engine))
+            worker.signals.finished.connect(self._engine_updated)
+
+    def _app_update_found(self, update) -> None:
+        self.settings.last_app_check = date.today().isoformat()
+        self.settings.save()
+        if not update or update.version == self.settings.skipped_app_version:
+            return
+        self.app_update = update
+        self.banner_text.setText(
+            f"🎉 <b>¡Nueva versión {update.version} de {APP_NAME} disponible!</b>  "
+            f"Tienes la {APP_VERSION}.")
+        self.banner.show()
+        self.nav_updates.setText("🔄   Actualizaciones  ●")
+        self.notify("🎉 Nueva versión disponible", f"{APP_NAME} {update.version} ya está lista para instalar.")
+
+    def _skip_update(self) -> None:
+        if self.app_update:
+            self.settings.skipped_app_version = self.app_update.version
+            self.settings.save()
+        self.banner.hide()
+        self.nav_updates.setText("🔄   Actualizaciones")
+
+    def _engine_updated(self, version) -> None:
+        self.settings.last_engine_check = date.today().isoformat()
+        self.settings.save()
+        if version:
+            self.statusBar().showMessage(
+                f"⚙ Motor de descarga actualizado a {version}. Se usará la próxima vez que abras {APP_NAME}.", 10000)
+
+    def open_updates(self) -> None:
+        UpdatesDialog(self.settings, self, known_update=self.app_update).exec()
+
     def open_settings(self) -> None:
         if SettingsDialog(self.settings, self).exec():
             self.download_pool.setMaxThreadCount(self.settings.max_concurrent)
@@ -564,5 +676,7 @@ class MainWindow(QMainWindow):
                 worker.job.cancel()
             self.download_pool.waitForDone(5000)
         self.analyze_pool.clear()
+        if self.tray:
+            self.tray.hide()
         self.library.close()
         event.accept()

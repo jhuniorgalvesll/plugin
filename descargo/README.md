@@ -19,6 +19,9 @@
 | 📚 **Listas y perfiles** | Marca qué elementos de una lista quieres. Lo que ya descargaste se omite (descarga incremental). |
 | 🛡️ **Seguridad** | Cada archivo pasa por cuarentena y un análisis de 5 capas antes de llegar a tu carpeta. |
 | 🚫 **Uso responsable** | Bloquea páginas de pago (Netflix, Disney+, Spotify, Udemy, OnlyFans…) y contenido con DRM. |
+| 🔄 **Siempre al día** | El motor de descarga se actualiza solo (verificado con SHA-256) y la app avisa cuando hay una versión nueva. |
+| 🎵 **Portadas** | MP3, M4A, OPUS, FLAC y MP4 guardan la miniatura como carátula, con título y artista. |
+| 🔔 **Avisos** | Notificación de Windows al terminar una descarga o bloquear una amenaza. |
 | ☕ **Invítame un café** | Apoyo voluntario por Yape: **925 459 643**. |
 
 ## 🛡️ Cómo protege tu computador
@@ -37,7 +40,7 @@ Las capas 1 a 3 y el bloqueo de páginas de pago **no se pueden desactivar**. Si
 
 ## 💻 Instalar en Windows
 
-**Opción A, descargar la versión compilada:** en GitHub, entra a **Actions → «DescarGO — compilar para Windows»**, abre la ejecución más reciente y descarga `DescarGO-Setup-Windows` (instalador) o `DescarGO-Portable-Windows`.
+**Opción A, descargar la versión publicada:** entra a [**Releases**](https://github.com/jhuniorgalvesll/inicio/releases) y descarga `DescarGO-Setup-X.Y.Z.exe`. También puedes bajar la compilación más reciente desde **Actions → «DescarGO — compilar para Windows»** → `DescarGO-Setup-Windows`.
 
 **Opción B, compilar tú mismo:** con [Python 3.12](https://www.python.org/downloads/) instalado, abre PowerShell en la carpeta `descargo`:
 
@@ -64,6 +67,18 @@ Pruebas automáticas:
 .venv/bin/python -m pytest -q tests
 ```
 
+## 🚀 Publicar una versión nueva
+
+1. Sube el número en `descargo/descargo/__init__.py` (`APP_VERSION`) y agrega sus novedades en `descargo/descargo/changelog.py`.
+2. Crea y sube la etiqueta con ese número:
+
+```bash
+git tag descargo-v1.2.0
+git push origin descargo-v1.2.0
+```
+
+GitHub compila el instalador, comprueba que la etiqueta coincide con la versión, publica el `.exe` y su `.sha256` en **Releases**, y los usuarios reciben el aviso de actualización dentro de la app.
+
 ## 📁 Estructura
 
 ```
@@ -78,6 +93,7 @@ descargo/
 │   │   ├── downloader.py     # cuarentena → análisis → carpeta final
 │   │   ├── security.py       # escáner de 5 capas
 │   │   ├── policy.py         # bloqueo de páginas de pago y DRM
+│   │   ├── updater.py        # actualización del motor y de la app
 │   │   └── library.py        # historial SQLite (evita duplicados)
 │   ├── ui/                   # ventanas (PySide6 / Qt)
 │   └── assets/               # logo e iconos

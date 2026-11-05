@@ -23,6 +23,10 @@ _FORMAT_SORT = {
     "webm": ["res", "fps", "vcodec:vp9", "acodec:opus"],
     "mkv": ["res", "fps"],
 }
+# Formatos que admiten portada incrustada.
+_COVER_AUDIO = {"original", "mp3", "m4a", "opus", "ogg", "flac"}
+_COVER_VIDEO = {"mp4", "mkv"}
+
 # Si los códecs no caben en el contenedor elegido, se usa MKV como respaldo.
 _MERGE_FORMAT = {"mp4": "mp4/mkv", "webm": "webm/mkv", "mkv": "mkv"}
 
@@ -60,6 +64,7 @@ def build_ydl_options(
     ffmpeg_dir: str | None = None,
     cookies_browser: str = "",
     rate_limit_kb: int = 0,
+    embed_thumbnail: bool = True,
     progress_hook: Callable[[dict], Any] | None = None,
     postprocessor_hook: Callable[[dict], Any] | None = None,
 ) -> dict:
@@ -96,6 +101,8 @@ def build_ydl_options(
         quality = str(req.audio_bitrate) if req.audio_format in AUDIO_FORMATS_WITH_BITRATE else "0"
         pps.append({"key": "FFmpegExtractAudio", "preferredcodec": codec, "preferredquality": quality})
         pps.append({"key": "FFmpegMetadata", "add_metadata": True})
+        if embed_thumbnail and req.audio_format in _COVER_AUDIO:
+            _add_cover(opts)
         return opts
 
     container = req.container if req.container in _MERGE_FORMAT else "mp4"
@@ -103,6 +110,8 @@ def build_ydl_options(
     opts["format_sort"] = list(_FORMAT_SORT[container])
     opts["merge_output_format"] = _MERGE_FORMAT[container]
     pps.append({"key": "FFmpegMetadata", "add_metadata": True})
+    if embed_thumbnail and container in _COVER_VIDEO:
+        _add_cover(opts)
 
     if req.subtitles:
         opts["writesubtitles"] = True
@@ -113,4 +122,13 @@ def build_ydl_options(
             pps.append({"key": "FFmpegEmbedSubtitle", "already_have_subtitle": False})
         else:
             pps.append({"key": "FFmpegSubtitlesConvertor", "format": "srt", "when": "before_dl"})
+    # la portada se incrusta al final, después de unir video, audio y subtítulos
+    covers = [p for p in pps if p["key"] == "EmbedThumbnail"]
+    opts["postprocessors"] = [p for p in pps if p["key"] != "EmbedThumbnail"] + covers
     return opts
+
+
+def _add_cover(opts: dict) -> None:
+    """Portada (miniatura) incrustada en el archivo; la imagen suelta se borra."""
+    opts["writethumbnail"] = True
+    opts["postprocessors"].append({"key": "EmbedThumbnail", "already_have_thumbnail": False})

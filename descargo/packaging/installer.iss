@@ -2,7 +2,9 @@
 ; Compilación:  iscc packaging\installer.iss
 
 #define AppName "DescarGO"
-#define AppVersion "1.0.0"
+#ifndef AppVersion
+  #define AppVersion "0.0.0"
+#endif
 #define AppPublisher "lliuya.pe"
 #define AppURL "https://lliuya.pe"
 

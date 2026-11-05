@@ -37,15 +37,20 @@ if (-not (Test-Path "$bin\ffmpeg.exe")) {
 Write-Host "==> Ejecutando pruebas" -ForegroundColor Cyan
 & .\.venv\Scripts\python.exe -m pytest -q tests
 
-Write-Host "==> Compilando DescarGO.exe" -ForegroundColor Cyan
+$version = (Select-String -Path "descargo\__init__.py" -Pattern 'APP_VERSION = "([^"]+)"').Matches[0].Groups[1].Value
+Write-Host "==> Compilando DescarGO.exe v$version" -ForegroundColor Cyan
 & .\.venv\Scripts\pyinstaller.exe packaging\descargo.spec --noconfirm --distpath dist --workpath build
 
 $iscc = @("${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe", "$env:ProgramFiles\Inno Setup 6\ISCC.exe") |
     Where-Object { Test-Path $_ } | Select-Object -First 1
 if ($iscc) {
     Write-Host "==> Creando instalador" -ForegroundColor Cyan
-    & $iscc packaging\installer.iss
-    Write-Host "Listo: dist\DescarGO-Setup-1.0.0.exe" -ForegroundColor Green
+    & $iscc "/DAppVersion=$version" packaging\installer.iss
+    $setup = "dist\DescarGO-Setup-$version.exe"
+    # Huella SHA-256 publicada junto al instalador (la app la verifica al actualizarse)
+    $hash = (Get-FileHash $setup -Algorithm SHA256).Hash.ToLower()
+    Set-Content -Path "$setup.sha256" -Value "$hash  DescarGO-Setup-$version.exe" -Encoding ascii -NoNewline
+    Write-Host "Listo: $setup  (SHA-256 $hash)" -ForegroundColor Green
 } else {
     Write-Host "Listo: dist\DescarGO\DescarGO.exe  (instala Inno Setup 6 para generar el instalador)" -ForegroundColor Green
 }

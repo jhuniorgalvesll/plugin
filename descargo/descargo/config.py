@@ -28,6 +28,8 @@ class Settings:
     last_choice: dict = field(default_factory=dict)
     clipboard_watch: bool = True
     theme: str = "light"  # "light" | "dark"
+    embed_thumbnail: bool = True  # portada y datos dentro del archivo
+    notifications: bool = True    # avisos de Windows al terminar
     accepted_terms: bool = False
 
     # Red (respeto a las plataformas)
@@ -41,6 +43,14 @@ class Settings:
     virustotal_enabled: bool = False
     virustotal_key: str = ""
     threat_action: str = "delete"  # "delete" | "quarantine"
+
+    # Actualizaciones
+    auto_update_engine: bool = True
+    check_app_updates: bool = True
+    last_engine_check: str = ""
+    last_app_check: str = ""
+    skipped_app_version: str = ""
+    last_seen_version: str = ""
 
     _path: Path | None = field(default=None, repr=False, compare=False)
 

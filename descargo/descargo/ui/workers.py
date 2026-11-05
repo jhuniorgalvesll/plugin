@@ -52,3 +52,31 @@ class DownloadWorker(QRunnable):
         except Exception as exc:
             result = JobResult(STATUS_ERROR, message=analyzer.friendly_error(str(exc)))
         self.signals.finished.emit(self.job.request.job_id, result)
+
+
+class TaskSignals(QObject):
+    finished = Signal(object)
+    failed = Signal(str)
+    progress = Signal(object, object)
+
+
+class TaskWorker(QRunnable):
+    """Ejecuta una función en segundo plano. Si acepta «progress», recibe un callback."""
+
+    def __init__(self, fn, *args, with_progress: bool = False):
+        super().__init__()
+        self.fn = fn
+        self.args = args
+        self.with_progress = with_progress
+        self.signals = TaskSignals()
+
+    def run(self) -> None:
+        try:
+            if self.with_progress:
+                result = self.fn(*self.args, progress=lambda d, t: self.signals.progress.emit(d, t))
+            else:
+                result = self.fn(*self.args)
+        except Exception as exc:
+            self.signals.failed.emit(str(exc))
+        else:
+            self.signals.finished.emit(result)

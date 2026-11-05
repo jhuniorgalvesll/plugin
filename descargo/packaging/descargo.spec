@@ -2,12 +2,24 @@
 # Compilación:  pyinstaller packaging/descargo.spec --noconfirm
 from pathlib import Path
 
-from PyInstaller.utils.hooks import collect_submodules
+import re
+
+from PyInstaller.utils.hooks import collect_submodules, copy_metadata
 
 ROOT = Path(SPECPATH).parent
 PKG = ROOT / "descargo"
 
-datas = [(str(PKG / "assets"), "descargo/assets")]
+# Versión única: se lee de descargo/__init__.py
+VERSION = re.search(r'APP_VERSION = "([^"]+)"', (PKG / "__init__.py").read_text(encoding="utf-8")).group(1)
+parts = tuple(int(x) for x in VERSION.split(".")) + (0,) * (4 - len(VERSION.split(".")))
+version_file = Path(workpath) / "version_info.txt"
+version_file.parent.mkdir(parents=True, exist_ok=True)
+version_file.write_text(
+    (ROOT / "packaging" / "version_info.txt").read_text(encoding="utf-8").replace("{v}", VERSION)
+    .replace("{vt}", str(parts[:4])), encoding="utf-8")
+
+# copy_metadata: permite saber qué versión del motor trae el instalador
+datas = [(str(PKG / "assets"), "descargo/assets")] + copy_metadata("yt-dlp")
 binaries = [(str(p), "descargo/bin") for p in (PKG / "bin").glob("*.exe")]
 
 a = Analysis(
@@ -15,7 +27,8 @@ a = Analysis(
     pathex=[str(ROOT)],
     binaries=binaries,
     datas=datas,
-    hiddenimports=collect_submodules("yt_dlp.extractor") + collect_submodules("yt_dlp.postprocessor"),
+    hiddenimports=collect_submodules("yt_dlp.extractor") + collect_submodules("yt_dlp.postprocessor")
+    + collect_submodules("mutagen"),
     excludes=["tkinter", "PySide6.QtWebEngineCore", "PySide6.QtWebEngineWidgets", "PySide6.Qt3DCore",
               "PySide6.QtQuick", "PySide6.QtQml", "PySide6.QtMultimedia", "PySide6.QtCharts",
               "PySide6.QtDataVisualization", "PySide6.QtPdf"],
@@ -29,7 +42,7 @@ exe = EXE(
     exclude_binaries=True,
     name="DescarGO",
     icon=str(PKG / "assets" / "descargo.ico"),
-    version=str(ROOT / "packaging" / "version_info.txt"),
+    version=str(version_file),
     console=False,
     upx=False,
 )

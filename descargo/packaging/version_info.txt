@@ -1,7 +1,7 @@
 VSVersionInfo(
   ffi=FixedFileInfo(
-    filevers=(1, 0, 0, 0),
-    prodvers=(1, 0, 0, 0),
+    filevers={vt},
+    prodvers={vt},
     mask=0x3f,
     flags=0x0,
     OS=0x40004,
@@ -14,12 +14,12 @@ VSVersionInfo(
       StringTable('080A04B0', [
         StringStruct('CompanyName', 'lliuya.pe'),
         StringStruct('FileDescription', 'DescarGO - Descargador de video y audio seguro'),
-        StringStruct('FileVersion', '1.0.0'),
+        StringStruct('FileVersion', '{v}'),
         StringStruct('InternalName', 'DescarGO'),
         StringStruct('LegalCopyright', '© 2026 lliuya.pe. Todos los derechos reservados.'),
         StringStruct('OriginalFilename', 'DescarGO.exe'),
         StringStruct('ProductName', 'DescarGO'),
-        StringStruct('ProductVersion', '1.0.0')
+        StringStruct('ProductVersion', '{v}')
       ])
     ]),
     VarFileInfo([VarStruct('Translation', [0x080A, 1200])])
