@@ -101,7 +101,7 @@ class MainWindow(QMainWindow):
 
         QGuiApplication.clipboard().dataChanged.connect(self._clipboard_changed)
         QShortcut(QKeySequence.Paste, self, activated=self._paste_shortcut)
-        private_key = self.licenses.private_key()
+        private_key = self.licenses.private_key() if self.licenses.is_author else None
         if private_key:  # solo en el computador del autor
             QShortcut(QKeySequence("Ctrl+Shift+L"), self,
                       activated=lambda: LicenseGeneratorDialog(private_key, self).exec())
@@ -143,8 +143,8 @@ class MainWindow(QMainWindow):
         self.nav_license = self._nav_button("🔑   Licencia")
         self.nav_license.clicked.connect(lambda: self.open_license())
         nav_gen = None
-        private_key = self.licenses.private_key()
-        if private_key:  # solo en el computador del autor (tiene la llave privada)
+        private_key = self.licenses.private_key() if self.licenses.is_author else None
+        if private_key:  # solo en el computador del autor (tiene la llave privada real)
             nav_gen = self._nav_button("🛠   Generar licencias")
             nav_gen.clicked.connect(lambda: LicenseGeneratorDialog(private_key, self).exec())
         for b in (self.nav_downloads, self.nav_history, nav_settings, self.nav_updates,
@@ -749,7 +749,10 @@ class MainWindow(QMainWindow):
 
     def _update_plan(self) -> None:
         lm = self.licenses
-        if lm.licensed:
+        if lm.is_author:
+            self.plan_label.setText("👑 Autor · descargas ilimitadas")
+            self.nav_license.setText("🔑   Licencia")
+        elif lm.licensed:
             self.plan_label.setText(f"✅ Licencia activa\n{lm.license.name}")
             self.nav_license.setText("🔑   Licencia")
         else:

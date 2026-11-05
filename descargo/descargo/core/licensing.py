@@ -159,6 +159,7 @@ class LicenseManager:
         self._license_file = self.folder / "licencia.txt"
         self._usage_file = self.folder / "uso.json"
         self.license: License | None = None
+        self._author: bool | None = None
         self.load()
 
     # -- licencia -------------------------------------------------------------
@@ -181,7 +182,28 @@ class LicenseManager:
         self.license = None
 
     @property
+    def is_author(self) -> bool:
+        """El computador del autor: tiene la llave privada REAL (la que firma las licencias).
+
+        Un archivo falso con el mismo nombre no sirve: se comprueba que corresponda a la
+        llave pública incluida en la app.
+        """
+        if self._author is None:
+            self._author = False
+            pem = self.private_key()
+            if pem:
+                try:
+                    from Cryptodome.PublicKey import ECC
+                    mine = ECC.import_key(pem).public_key()
+                    self._author = mine == ECC.import_key(PUBLIC_KEY_PEM)
+                except (ValueError, TypeError, IndexError):
+                    self._author = False
+        return self._author
+
+    @property
     def licensed(self) -> bool:
+        if self.is_author:
+            return True
         return self.license is not None and not self.license.expired
 
     # -- contador diario --------------------------------------------------------

@@ -83,3 +83,19 @@ def test_private_key_never_in_repo():
             and p.suffix in (".key", ".pem", ".py", ".txt", ".md")
             and ("-----BEGIN " + "PRIVATE KEY-----") in p.read_text(errors="ignore")]
     assert hits == [], hits
+
+
+def test_author_mode_requires_real_private_key(tmp_path, keypair):
+    lm = LicenseManager(tmp_path)
+    assert not lm.is_author
+    # una llave cualquiera con el mismo nombre NO da modo autor
+    fake = ECC.generate(curve="ed25519").export_key(format="PEM")
+    (tmp_path / licensing.PRIVATE_KEY_FILENAME).write_text(fake)
+    lm = LicenseManager(tmp_path)
+    assert not lm.is_author and not lm.licensed and lm.remaining_today() == FREE_DAILY_LIMIT
+    # la llave real (la que corresponde a la pública de la app) sí
+    (tmp_path / licensing.PRIVATE_KEY_FILENAME).write_text(keypair)
+    lm = LicenseManager(tmp_path)
+    assert lm.is_author and lm.licensed and lm.remaining_today() is None
+    (tmp_path / licensing.PRIVATE_KEY_FILENAME).write_text("basura")
+    assert not LicenseManager(tmp_path).is_author

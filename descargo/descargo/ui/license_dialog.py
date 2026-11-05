@@ -105,6 +105,12 @@ class LicenseDialog(QDialog):
 
     def _refresh(self) -> None:
         m = self.manager
+        if m.is_author:
+            self.status.setText("👑 <b>Modo autor</b> — este computador tiene tu llave de licencias.<br>"
+                                "Descargas ilimitadas y acceso al generador de licencias.")
+            for w in (self.key_input, self.how, self.btn_activate, self.btn_remove):
+                w.hide()
+            return
         if m.licensed:
             self.status.setText(f"✅ <b>Licencia activa</b> — {m.license.summary}<br>"
                                 "Descargas ilimitadas. ¡Gracias por tu apoyo! 💜")

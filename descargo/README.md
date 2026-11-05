@@ -81,6 +81,8 @@ GitHub ejecuta las pruebas, compila el instalador y, si esa versión todavía no
 
 **Vender una licencia:** el cliente abre **Licencia** en la app, copia su código de equipo y te lo envía con la captura del Yape. Tú abres **🛠 Generar licencias** (solo aparece en tu computador), escribes nombre, código y duración, y le envías la clave `DGO1-…`.
 
+**Tu computador (modo autor):** con la llave privada en `%APPDATA%\DescarGO\`, la app detecta que eres el autor: descargas ilimitadas, sin licencia, y aparece el generador. La app verifica que sea la llave real; un archivo falso no sirve.
+
 > La llave privada (`descargo-licencias.key`) va en `%APPDATA%\DescarGO\` **solo en tu computador**. Nunca la subas a GitHub ni la compartas: con ella cualquiera podría crear licencias.
 
 ## 📁 Estructura

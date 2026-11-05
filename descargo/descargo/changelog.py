@@ -1,6 +1,11 @@
 """Novedades de cada versión (se muestran en la app y en GitHub Releases)."""
 
 CHANGELOG: list[tuple[str, list[str]]] = [
+    ("1.3.1", [
+        "👑 Modo autor: el computador con la llave de licencias de lliuya.pe descarga sin "
+        "límites y ve el generador de licencias. Los demás usuarios tienen el plan gratuito "
+        "de 10 descargas por día o su licencia.",
+    ]),
     ("1.3.0", [
         "🔔 Actualizaciones automáticas: cada vez que abres DescarGO revisa si hay una versión "
         "nueva y te pregunta si quieres instalarla ahora (se descarga y verifica sola).",
