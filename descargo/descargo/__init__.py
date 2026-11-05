@@ -6,7 +6,7 @@
 from datetime import date
 
 APP_NAME = "DescarGO"
-APP_VERSION = "1.4.2"
+APP_VERSION = "1.5.0"
 APP_TAGLINE = "Descarga y listo"
 APP_ID = "pe.lliuya.descargo"
 

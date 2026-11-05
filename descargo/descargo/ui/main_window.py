@@ -142,7 +142,7 @@ class MainWindow(QMainWindow):
         self.nav_license = self._nav_button("🔑   Licencia")
         self.nav_license.clicked.connect(lambda: self.open_license())
         # Menú del autor: visible solo si este computador tiene la llave real.
-        self.nav_gen = self._nav_button("🛠   Generar licencias")
+        self.nav_gen = self._nav_button("👑   Administrador")
         self.nav_gen.clicked.connect(self.open_generator)
         for b in (self.nav_downloads, self.nav_history, nav_settings, self.nav_updates,
                   self.nav_license, nav_about):
@@ -748,7 +748,7 @@ class MainWindow(QMainWindow):
         lm = self.licenses
         self.nav_gen.setVisible(lm.is_author)
         if lm.is_author:
-            self.plan_label.setText("👑 Autor · descargas ilimitadas")
+            self.plan_label.setText("👑 Administrador\nTodo ilimitado · sin vencimiento")
             self.nav_license.setText("🔑   Licencia")
         elif lm.licensed:
             self.plan_label.setText(f"✅ Licencia activa\n{lm.license.name}")

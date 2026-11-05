@@ -258,9 +258,11 @@ class LicenseManager:
         return self.is_author
 
     # -- registro de licencias emitidas (solo autor) ------------------------------
-    def log_issued(self, name: str, machine: str, expires: str | None, key: str) -> None:
+    def log_issued(self, name: str, machine: str, expires: str | None, key: str,
+                   amount: float = 0.0, note: str = "") -> None:
         entry = {"fecha": datetime.now().isoformat(timespec="seconds"), "nombre": name,
-                 "equipo": machine, "vence": expires, "licencia": key}
+                 "equipo": machine, "vence": expires, "licencia": key,
+                 "monto": round(float(amount or 0), 2), "nota": note}
         with open(self.folder / "licencias_emitidas.jsonl", "a", encoding="utf-8") as fh:
             fh.write(json.dumps(entry, ensure_ascii=False) + "\n")
 
@@ -275,6 +277,51 @@ class LicenseManager:
             except ValueError:
                 continue
         return list(reversed(items))
+
+
+@dataclass
+class Client:
+    name: str
+    machine: str
+    expires: str | None      # de la licencia más reciente
+    last_key: str
+    total_paid: float
+    licenses: int
+    last_issued: str
+
+    def status(self, today: date | None = None) -> tuple[str, int | None]:
+        """(«active» | «expiring» | «expired» | «permanent», días restantes)."""
+        if not self.expires:
+            return "permanent", None
+        today = today or date.today()
+        days = (date.fromisoformat(self.expires) - today).days
+        if days < 0:
+            return "expired", days
+        if days <= 15:
+            return "expiring", days
+        return "active", days
+
+
+def summarize_clients(entries: list[dict]) -> list[Client]:
+    """Agrupa las licencias emitidas por código de equipo (la más reciente manda)."""
+    clients: dict[str, Client] = {}
+    for e in sorted(entries, key=lambda x: str(x.get("fecha", ""))):
+        machine = str(e.get("equipo", "")).upper()
+        if not machine:
+            continue
+        c = clients.get(machine)
+        paid = float(e.get("monto") or 0)
+        if c is None:
+            clients[machine] = Client(str(e.get("nombre", "")), machine, e.get("vence"),
+                                      str(e.get("licencia", "")), paid, 1, str(e.get("fecha", "")))
+        else:
+            c.name = str(e.get("nombre") or c.name)
+            c.expires = e.get("vence")
+            c.last_key = str(e.get("licencia", ""))
+            c.total_paid += paid
+            c.licenses += 1
+            c.last_issued = str(e.get("fecha", ""))
+    return sorted(clients.values(), key=lambda c: c.last_issued, reverse=True)
 
 
 def add_months(start: date, months: int) -> date:

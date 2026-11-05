@@ -1,6 +1,14 @@
 """Novedades de cada versión (se muestran en la app y en GitHub Releases)."""
 
 CHANGELOG: list[tuple[str, list[str]]] = [
+    ("1.5.0", [
+        "👑 Panel de administrador: lista de clientes con el estado de su licencia (activa, por "
+        "vencer, vencida o permanente), buscador e ingresos registrados.",
+        "🔄 Renovar con un clic: doble clic en un cliente para generarle una licencia nueva con "
+        "su mismo código de equipo.",
+        "💰 Registra el monto pagado y una nota (por ejemplo, el n.º de operación de Yape).",
+        "💬 «Copiar mensaje para el cliente»: copia la licencia junto con las instrucciones para activarla.",
+    ]),
     ("1.4.2", [
         "🔧 Arreglado el error «Acceso denegado» al actualizar: ahora la actualización espera a "
         "que DescarGO se cierre por completo antes de instalar.",

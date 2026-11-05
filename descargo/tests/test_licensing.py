@@ -119,3 +119,27 @@ def test_install_author_key_and_issued_log(tmp_path, keypair):
     lm.log_issued("Ana", "AAAA-BBBB-CCCC-DDDD", "2027-04-05", "DGO1-x")
     lm.log_issued("Beto", "1111-2222-3333-4444", None, "DGO1-y")
     assert [i["nombre"] for i in lm.issued()] == ["Beto", "Ana"]
+
+
+def test_summarize_clients_status_and_payments():
+    from datetime import date, timedelta
+    from descargo.core.licensing import summarize_clients
+    today = date.today()
+    entries = [
+        {"fecha": "2026-01-01T10:00", "nombre": "Ana", "equipo": "aaaa-bbbb-cccc-dddd",
+         "vence": (today - timedelta(days=3)).isoformat(), "licencia": "k1", "monto": 15},
+        {"fecha": "2026-06-01T10:00", "nombre": "Ana Q.", "equipo": "AAAA-BBBB-CCCC-DDDD",
+         "vence": (today + timedelta(days=150)).isoformat(), "licencia": "k2", "monto": 15},
+        {"fecha": "2026-05-01T10:00", "nombre": "Beto", "equipo": "1111-2222-3333-4444",
+         "vence": (today + timedelta(days=5)).isoformat(), "licencia": "k3", "monto": 10},
+        {"fecha": "2026-04-01T10:00", "nombre": "Caro", "equipo": "9999-8888-7777-6666",
+         "vence": None, "licencia": "k4"},
+    ]
+    clients = {c.name: c for c in summarize_clients(entries)}
+    ana = clients["Ana Q."]                      # renovación: se agrupa por equipo
+    assert ana.licenses == 2 and ana.total_paid == 30 and ana.last_key == "k2"
+    assert ana.status()[0] == "active"
+    assert clients["Beto"].status() == ("expiring", 5)
+    assert clients["Caro"].status() == ("permanent", None)
+    old = summarize_clients(entries[:1])[0]
+    assert old.status()[0] == "expired"
