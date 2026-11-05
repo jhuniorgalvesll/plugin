@@ -1,6 +1,12 @@
 """Novedades de cada versión (se muestran en la app y en GitHub Releases)."""
 
 CHANGELOG: list[tuple[str, list[str]]] = [
+    ("1.6.1", [
+        "🎚️ Vuelve a preguntarte la calidad antes de descargar (1080p, 2K, 4K, 8K…). "
+        "El «modo rápido» quedó apagado.",
+        "✅ Nuevo interruptor «Preguntar la calidad antes de descargar» junto a la barra del "
+        "enlace: tú decides si quieres elegir siempre o descargar directo.",
+    ]),
     ("1.6.0", [
         "🔐 Más seguridad contra copias: cada licencia lleva un identificador único y el "
         "administrador puede ANULAR a distancia una licencia robada, compartida o no pagada.",

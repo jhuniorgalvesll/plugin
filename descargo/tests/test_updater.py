@@ -152,3 +152,15 @@ def test_update_script_waits_then_installs_silently():
     assert "-Wait" in lines[3] and "O''Brien" in lines[3]              #    (rutas con comillas escapadas)
     assert lines[4].startswith("Start-Process -FilePath 'C:\\Users\\USER")  # 3) abre la nueva versión
     assert "/ALLUSERS" in build_update_script(inst, r"C:\Program Files\DescarGO\DescarGO.exe", 1, r"C:\Users\USER\AppData\Local")
+
+
+def test_quick_mode_reset_on_upgrade(tmp_path):
+    import json as _json
+    from descargo.config import Settings
+    p = tmp_path / "ajustes.json"
+    p.write_text(_json.dumps({"quick_mode": True}))   # usuario con modo rápido activado
+    s = Settings.load(p)
+    assert s.quick_mode is False and s.quick_mode_reset_161 is True
+    s.quick_mode = True                               # si lo vuelve a activar a propósito…
+    s.save()
+    assert Settings.load(p).quick_mode is True         # …se respeta (ya no se reinicia)

@@ -9,7 +9,7 @@ from PySide6.QtCore import Qt, QThreadPool, QTimer, QUrl
 from datetime import date
 
 from PySide6.QtGui import QDesktopServices, QGuiApplication, QKeySequence, QShortcut
-from PySide6.QtWidgets import (QAbstractItemView, QButtonGroup, QFrame, QMenu, QSystemTrayIcon, QHBoxLayout, QHeaderView, QLabel,
+from PySide6.QtWidgets import (QAbstractItemView, QButtonGroup, QCheckBox, QFrame, QMenu, QSystemTrayIcon, QHBoxLayout, QHeaderView, QLabel,
                                QLineEdit, QMainWindow, QMessageBox, QPushButton, QScrollArea,
                                QStackedWidget, QTableWidget, QTableWidgetItem, QVBoxLayout,
                                QWidget)
@@ -247,7 +247,16 @@ class MainWindow(QMainWindow):
             chips.addWidget(chip)
         chips.addStretch(1)
         lay.addLayout(chips)
+        self.chk_ask = QCheckBox("🎚️  Preguntar la calidad antes de descargar (1080p, 2K, 4K, 8K…)")
+        self.chk_ask.setChecked(not self.settings.quick_mode)
+        self.chk_ask.setToolTip("Si lo desmarcas, descarga directo con tu última elección (modo rápido).")
+        self.chk_ask.toggled.connect(self._toggle_ask)
+        lay.addWidget(self.chk_ask)
         return card
+
+    def _toggle_ask(self, ask: bool) -> None:
+        self.settings.quick_mode = not ask
+        self.settings.save()
 
     def _downloads_tab(self) -> QWidget:
         page = QWidget()
@@ -417,6 +426,7 @@ class MainWindow(QMainWindow):
             return
         dialog = OptionsDialog(info, self.settings, self, premium=self.licenses.licensed)
         accepted = dialog.exec()
+        self.chk_ask.setChecked(not self.settings.quick_mode)  # refleja «Recordar mi elección»
         if dialog.want_license:
             self.open_license()
             return
@@ -831,6 +841,7 @@ class MainWindow(QMainWindow):
     def open_settings(self) -> None:
         if SettingsDialog(self.settings, self).exec():
             self.download_pool.setMaxThreadCount(self.settings.max_concurrent)
+            self.chk_ask.setChecked(not self.settings.quick_mode)
             self.statusBar().showMessage("Ajustes guardados.", 3000)
 
     def closeEvent(self, event) -> None:  # noqa: N802

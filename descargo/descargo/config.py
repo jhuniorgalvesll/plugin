@@ -51,6 +51,8 @@ class Settings:
     last_app_check: str = ""
     skipped_app_version: str = ""
     last_seen_version: str = ""
+    # Reinicio único del modo rápido en 1.6.1: así vuelve a preguntar la calidad.
+    quick_mode_reset_161: bool = False
 
     _path: Path | None = field(default=None, repr=False, compare=False)
 
@@ -70,6 +72,9 @@ class Settings:
                     if default is None or isinstance(value, type(default)):
                         setattr(settings, key, value)
         settings._path = path
+        if not settings.quick_mode_reset_161:
+            settings.quick_mode = False          # vuelve a preguntar la calidad
+            settings.quick_mode_reset_161 = True
         settings.normalize()
         return settings
 
