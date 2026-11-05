@@ -189,9 +189,9 @@ class MainWindow(QMainWindow):
         self.banner_text = QLabel("")
         self.banner_text.setTextFormat(Qt.RichText)
         row.addWidget(self.banner_text, 1)
-        see = QPushButton("Ver novedades")
+        see = QPushButton("⬆  Actualizar ahora")
         see.setObjectName("Primary")
-        see.clicked.connect(self.open_updates)
+        see.clicked.connect(self.install_update)
         later = QPushButton("Omitir esta versión")
         later.setObjectName("Ghost")
         later.clicked.connect(self._skip_update)
@@ -683,19 +683,37 @@ class MainWindow(QMainWindow):
     def _startup_checks(self) -> None:
         today = date.today().isoformat()
         self._update_plan()
-        if self.settings.check_app_updates:  # en cada inicio
-            worker = self._run_task(TaskWorker(updater.check_app_update))
-            worker.signals.finished.connect(self._app_update_found)
+        self._check_app_update()  # al iniciar…
+        self._update_timer = QTimer(self)  # …y cada hora mientras la app está abierta
+        self._update_timer.timeout.connect(self._check_app_update)
+        self._update_timer.start(60 * 60 * 1000)
         if self.settings.auto_update_engine and self.settings.last_engine_check != today:
             worker = self._run_task(TaskWorker(check_and_install_engine))
             worker.signals.finished.connect(self._engine_updated)
+
+    def _check_app_update(self) -> None:
+        if self.settings.check_app_updates:
+            worker = self._run_task(TaskWorker(updater.check_app_update))
+            worker.signals.finished.connect(self._app_update_found)
+
+    def install_update(self) -> None:
+        """Un clic: descarga, verifica, instala en silencio y vuelve a abrir la app."""
+        if not self.app_update:
+            self.open_updates()
+            return
+        dialog = UpdatesDialog(self.settings, self, known_update=self.app_update)
+        QTimer.singleShot(200, dialog.install_app)
+        dialog.exec()
 
     def _app_update_found(self, update) -> None:
         self.settings.last_app_check = date.today().isoformat()
         self.settings.save()
         if not update or update.version == self.settings.skipped_app_version:
             return
+        already_seen = self.app_update is not None and self.app_update.version == update.version
         self.app_update = update
+        if already_seen:  # revisión periódica: no repetir la ventana por la misma versión
+            return
         self.banner_text.setText(
             f"🎉 <b>¡Nueva versión {update.version} de {APP_NAME} disponible!</b>  "
             f"Tienes la {APP_VERSION}.")
@@ -715,15 +733,14 @@ class MainWindow(QMainWindow):
         notes = notes_for(update.version) or [l.lstrip("- ").strip() for l in update.notes.splitlines()
                                               if l.strip().startswith("-")]
         box.setInformativeText("\n".join(f"• {n}" for n in notes[:5]) or "Mejoras y correcciones.")
+        box.setInformativeText(box.informativeText() + "\n\nSe instala sola y DescarGO se vuelve a abrir.")
         now = box.addButton("Actualizar ahora", QMessageBox.AcceptRole)
         box.addButton("Más tarde", QMessageBox.RejectRole)
         skip = box.addButton("Omitir esta versión", QMessageBox.DestructiveRole)
         box.setDefaultButton(now)
         box.exec()
         if box.clickedButton() is now:
-            dialog = UpdatesDialog(self.settings, self, known_update=update)
-            QTimer.singleShot(200, dialog.install_app)
-            dialog.exec()
+            self.install_update()
         elif box.clickedButton() is skip:
             self._skip_update()
 

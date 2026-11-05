@@ -26,6 +26,8 @@ UninstallDisplayIcon={app}\DescarGO.exe
 Compression=lzma2/max
 SolidCompression=yes
 WizardStyle=modern
+CloseApplications=force
+RestartApplications=no
 PrivilegesRequiredOverridesAllowed=dialog
 ArchitecturesInstallIn64BitMode=x64compatible
 
@@ -45,3 +47,5 @@ Name: "{autodesktop}\{#AppName}"; Filename: "{app}\DescarGO.exe"; Tasks: desktop
 
 [Run]
 Filename: "{app}\DescarGO.exe"; Description: "Abrir {#AppName}"; Flags: nowait postinstall skipifsilent
+; Actualización automática (instalación silenciosa desde la app): volver a abrir DescarGO
+Filename: "{app}\DescarGO.exe"; Flags: nowait; Check: WizardSilent

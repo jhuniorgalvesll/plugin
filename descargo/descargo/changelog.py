@@ -1,6 +1,11 @@
 """Novedades de cada versión (se muestran en la app y en GitHub Releases)."""
 
 CHANGELOG: list[tuple[str, list[str]]] = [
+    ("1.4.1", [
+        "⬆ Actualización en un clic: DescarGO revisa GitHub al abrirse y cada hora; cuando hay "
+        "versión nueva aparece «Actualizar ahora». Se descarga, se verifica, se instala sola sin "
+        "asistente y la app se vuelve a abrir.",
+    ]),
     ("1.4.0", [
         "♾️ Descargas sin límite diario para todos.",
         "🔒 Sin licencia activa (plan gratuito o licencia vencida) las descargas son en calidad "

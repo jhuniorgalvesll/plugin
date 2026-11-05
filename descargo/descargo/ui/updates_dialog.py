@@ -30,9 +30,13 @@ def restart_app() -> None:
     QApplication.quit()
 
 
+# Instalación silenciosa: sin asistente, cierra DescarGO, actualiza y lo vuelve a abrir.
+SILENT_INSTALL_ARGS = ["/SILENT", "/SP-", "/NOCANCEL", "/SUPPRESSMSGBOXES", "/CLOSEAPPLICATIONS"]
+
+
 def run_installer(path: str) -> None:
-    """Abre el instalador descargado y cierra la app para que pueda reemplazarla."""
-    if not QProcess.startDetached(path, []):
+    """Ejecuta el instalador verificado en modo silencioso y cierra la app para reemplazarla."""
+    if not QProcess.startDetached(path, SILENT_INSTALL_ARGS):
         raise updater.UpdateError("No se pudo abrir el instalador.")
     for widget in QApplication.topLevelWidgets():
         widget.close()
@@ -197,7 +201,7 @@ class UpdatesDialog(QDialog):
         answer = QMessageBox.question(
             self, "Instalar actualización",
             "El instalador se descargó y su huella SHA-256 fue verificada.\n\n"
-            f"{APP_NAME} se cerrará para instalar la nueva versión. ¿Continuar?")
+            f"{APP_NAME} se cerrará, se actualizará y se volverá a abrir solo. ¿Continuar?")
         if answer == QMessageBox.Yes:
             try:
                 run_installer(str(path))
