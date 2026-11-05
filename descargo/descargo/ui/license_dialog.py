@@ -12,7 +12,7 @@ from PySide6.QtWidgets import (QAbstractItemView, QComboBox, QDateEdit, QDialog,
                                QTableWidgetItem, QTabWidget, QVBoxLayout, QWidget)
 
 from .. import APP_NAME, AUTHOR_HANDLE, AUTHOR_INSTAGRAM, YAPE_NUMBER_DISPLAY
-from ..core.licensing import (FREE_DAILY_LIMIT, LicenseError, LicenseManager, add_months,
+from ..core.licensing import (STANDARD_MAX_KBPS, STANDARD_MAX_RES, LicenseError, LicenseManager, add_months,
                               create_license, machine_code)
 
 
@@ -27,7 +27,7 @@ def _label(text: str, muted: bool = False) -> QLabel:
 
 
 class LicenseDialog(QDialog):
-    def __init__(self, manager: LicenseManager, parent: QWidget | None = None, limit_reached: bool = False):
+    def __init__(self, manager: LicenseManager, parent: QWidget | None = None):
         super().__init__(parent)
         self.manager = manager
         self.setWindowTitle(f"Licencia — {APP_NAME}")
@@ -40,15 +40,16 @@ class LicenseDialog(QDialog):
         title.setObjectName("DialogTitle")
         root.addWidget(title)
 
-        if limit_reached:
-            warn = QFrame()
-            warn.setObjectName("NoticeCard")
-            w_lay = QVBoxLayout(warn)
-            w_lay.setContentsMargins(14, 10, 14, 10)
-            w_lay.addWidget(_label(
-                f"⏳ <b>Llegaste al límite gratuito de {FREE_DAILY_LIMIT} descargas de hoy.</b><br>"
-                "Mañana se renueva, o activa una licencia para descargar sin límites."))
-            root.addWidget(warn)
+        plans = QFrame()
+        plans.setObjectName("NoticeCard")
+        p_lay = QVBoxLayout(plans)
+        p_lay.setContentsMargins(14, 10, 14, 10)
+        p_lay.addWidget(_label(
+            f"<b>Sin licencia:</b> descargas ilimitadas en calidad estándar "
+            f"(video hasta {STANDARD_MAX_RES}p, audio hasta {STANDARD_MAX_KBPS} kbps).<br>"
+            "<b>Con licencia:</b> alta calidad — HD, Full HD, 2K, 4K, 60fps, HDR, "
+            "audio 320 kbps, FLAC y audio original."))
+        root.addWidget(plans)
 
         # Estado actual
         self.status = _label("")
@@ -120,14 +121,18 @@ class LicenseDialog(QDialog):
             return
         if m.licensed:
             self.status.setText(f"✅ <b>Licencia activa</b> — {m.license.summary}<br>"
-                                "Descargas ilimitadas. ¡Gracias por tu apoyo! 💜")
+                                "Alta calidad desbloqueada (HD, 4K, audio 320 kbps). ¡Gracias por tu apoyo! 💜")
             self.key_input.hide()
             self.how.hide()
             self.btn_activate.hide()
             self.btn_remove.show()
         else:
-            left = m.remaining_today()
-            self.status.setText(f"Plan gratuito: <b>{left} de {FREE_DAILY_LIMIT}</b> descargas disponibles hoy.")
+            if m.expired_license:
+                self.status.setText(f"⚠️ <b>Tu licencia venció el {m.expired_license.expires}.</b> "
+                                    "Estás descargando en calidad estándar. Pega una licencia nueva "
+                                    "para recuperar la alta calidad.")
+            else:
+                self.status.setText("Plan gratuito: <b>calidad estándar</b>, sin límite de descargas.")
             self.key_input.show()
             self.how.show()
             self.btn_activate.show()
@@ -158,7 +163,7 @@ class LicenseDialog(QDialog):
         except LicenseError as exc:
             QMessageBox.warning(self, "No se pudo activar", str(exc))
             return
-        QMessageBox.information(self, "Licencia activada", f"¡Listo, {lic.name}! Ya puedes descargar sin límites.")
+        QMessageBox.information(self, "Licencia activada", f"¡Listo, {lic.name}! Ya puedes descargar en alta calidad.")
         self._refresh()
 
     def _deactivate(self) -> None:

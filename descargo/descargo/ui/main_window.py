@@ -26,7 +26,7 @@ from ..core.security import VERDICT_LABELS
 from ..utils import extract_urls, find_ffmpeg_dir, human_size
 from .dialogs import AboutDialog, CoffeeDialog, SettingsDialog
 from .options_dialog import OptionsDialog
-from ..core.licensing import FREE_DAILY_LIMIT, LicenseManager
+from ..core.licensing import STANDARD_MAX_KBPS, STANDARD_MAX_RES, LicenseManager
 from .license_dialog import LicenseDialog, LicenseGeneratorDialog
 from .updates_dialog import UpdatesDialog, check_and_install_engine
 from .widgets import AnalyzingItem, DownloadItem, app_icon, brand_label, logo_pixmap
@@ -96,6 +96,7 @@ class MainWindow(QMainWindow):
         self._tasks: list[TaskWorker] = []
         self._setup_tray()
         self._update_plan()  # muestra/oculta el menú del autor desde el inicio
+        QTimer.singleShot(1200, self._warn_expired)
         QTimer.singleShot(2500, self._startup_checks)
         # Precarga el motor en segundo plano: el primer análisis empieza sin esperas.
         QTimer.singleShot(300, lambda: self._run_task(TaskWorker(_warm_up_engine)))
@@ -414,8 +415,11 @@ class MainWindow(QMainWindow):
             req.prefetched_info = info.raw_info
             self.enqueue([req])
             return
-        dialog = OptionsDialog(info, self.settings, self)
+        dialog = OptionsDialog(info, self.settings, self, premium=self.licenses.licensed)
         accepted = dialog.exec()
+        if dialog.want_license:
+            self.open_license()
+            return
         if dialog.want_playlist and info.playlist_url:
             self.analyze_url(info.playlist_url, full_playlist=True)
             return
@@ -426,22 +430,8 @@ class MainWindow(QMainWindow):
             self.enqueue(dialog.requests, batch=info.is_playlist)
 
     # -- cola de descargas -------------------------------------------------------
-    def _free_slots(self) -> int | None:
-        """Descargas que aún caben hoy en el plan gratuito (None = ilimitado)."""
-        remaining = self.licenses.remaining_today()
-        if remaining is None:
-            return None
-        return max(0, remaining - len(self.workers))
-
     def enqueue(self, requests: list[DownloadRequest], batch: bool = False) -> None:
-        slots = self._free_slots()
-        if slots is not None and slots <= 0:
-            self.open_license(limit_reached=True)
-            return
-        limited = 0
-        if slots is not None and len(requests) > slots:
-            limited = len(requests) - slots
-            requests = requests[:slots]
+        reduced = sum(1 for req in requests if self.licenses.enforce(req))
         added = 0
         for index, req in enumerate(requests):
             previous = self.library.find_completed(req.url, req.quality_key)
@@ -471,11 +461,10 @@ class MainWindow(QMainWindow):
         if batch and skipped:
             self.statusBar().showMessage(
                 f"{added} en cola · {skipped} omitidos porque ya estaban descargados.", 8000)
-        if limited:
-            QMessageBox.information(
-                self, "Plan gratuito",
-                f"Se agregaron {added} descargas. Las otras {limited} superan el límite gratuito "
-                f"de {FREE_DAILY_LIMIT} por día.\n\nActiva una licencia para descargar sin límites.")
+        if reduced:
+            self.statusBar().showMessage(
+                f"🔒 Calidad estándar ({STANDARD_MAX_RES}p / {STANDARD_MAX_KBPS} kbps). "
+                "Activa una licencia para alta calidad.", 8000)
         self.show_page(0)
         self._update_counts()
 
@@ -527,8 +516,6 @@ class MainWindow(QMainWindow):
                 size=result.total_size, status=result.status,
                 verdict=result.verdict if result.reports else "")
         if result.status == STATUS_DONE:
-            self.licenses.record_download()
-            self._update_plan()
             self.statusBar().showMessage(f"✅ «{req.title}» descargado y verificado.", 6000)
             self.notify("✅ Descarga lista", f"{req.title}\nVerificada: sin amenazas.")
         elif result.status == STATUS_THREAT:
@@ -544,9 +531,7 @@ class MainWindow(QMainWindow):
     def resume_job(self, job_id: str) -> None:
         item = self.items.get(job_id)
         if item and job_id not in self.workers:
-            if self._free_slots() == 0:
-                self.open_license(limit_reached=True)
-                return
+            self.licenses.enforce(item.request)  # por si la licencia venció mientras tanto
             self._start_worker(item.request)
 
     def cancel_job(self, job_id: str) -> None:
@@ -751,18 +736,39 @@ class MainWindow(QMainWindow):
         elif lm.licensed:
             self.plan_label.setText(f"✅ Licencia activa\n{lm.license.name}")
             self.nav_license.setText("🔑   Licencia")
+        elif lm.expired_license:
+            self.plan_label.setText(f"⚠️ Licencia vencida ({lm.expired_license.expires})\n"
+                                    f"Calidad estándar · Toca para renovar")
+            self.nav_license.setText("🔑   Renovar licencia")
         else:
-            left = lm.remaining_today()
-            self.plan_label.setText(f"Plan gratuito · {left}/{FREE_DAILY_LIMIT} hoy\nToca para obtener licencia")
+            self.plan_label.setText(f"Plan gratuito · hasta {STANDARD_MAX_RES}p\n"
+                                    "Toca para alta calidad (HD/4K)")
             self.nav_license.setText("🔑   Obtener licencia")
 
     def open_generator(self) -> None:
         if self.licenses.is_author:
             LicenseGeneratorDialog(self.licenses, self).exec()
 
-    def open_license(self, limit_reached: bool = False) -> None:
-        LicenseDialog(self.licenses, self, limit_reached=limit_reached).exec()
+    def open_license(self) -> None:
+        LicenseDialog(self.licenses, self).exec()
         self._update_plan()
+
+    def _warn_expired(self) -> None:
+        lic = self.licenses.expired_license
+        if not lic:
+            return
+        box = QMessageBox(self)
+        box.setWindowTitle("Tu licencia venció")
+        box.setText(f"<b>Tu licencia de {APP_NAME} venció el {lic.expires}.</b>")
+        box.setInformativeText(
+            f"Puedes seguir descargando sin límite, pero en calidad estándar "
+            f"(video hasta {STANDARD_MAX_RES}p y audio hasta {STANDARD_MAX_KBPS} kbps).\n\n"
+            "Renueva tu licencia para volver a descargar en HD, Full HD, 4K y audio 320 kbps.")
+        renew = box.addButton("Renovar licencia", QMessageBox.AcceptRole)
+        box.addButton("Ahora no", QMessageBox.RejectRole)
+        box.exec()
+        if box.clickedButton() is renew:
+            self.open_license()
 
     def _skip_update(self) -> None:
         if self.app_update:

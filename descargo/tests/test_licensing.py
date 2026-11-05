@@ -4,7 +4,7 @@ import pytest
 from Cryptodome.PublicKey import ECC
 
 from descargo.core import licensing
-from descargo.core.licensing import (FREE_DAILY_LIMIT, LicenseError, LicenseManager,
+from descargo.core.licensing import (LicenseError, LicenseManager,
                                      create_license, machine_code, verify_license)
 
 
@@ -58,22 +58,19 @@ def test_real_public_key_is_valid():
     ECC.import_key(licensing.PUBLIC_KEY_PEM)  # la llave pública incluida carga bien
 
 
-def test_daily_limit_and_license(tmp_path, keypair):
+def test_license_persists_and_expired_is_kept(tmp_path, keypair):
     lm = LicenseManager(tmp_path)
-    assert lm.remaining_today() == FREE_DAILY_LIMIT
-    for _ in range(3):
-        lm.record_download()
-    assert lm.remaining_today() == FREE_DAILY_LIMIT - 3
-    # manipular el contador lo agota (no lo reinicia)
-    data = json.loads((tmp_path / "uso.json").read_text())
-    data["c"] = 0
-    (tmp_path / "uso.json").write_text(json.dumps(data))
-    assert lm.remaining_today() == 0
+    assert not lm.licensed and lm.expired_license is None
     lm.activate(create_license(keypair, "Cliente", machine_code()))
-    assert lm.licensed and lm.remaining_today() is None
-    assert LicenseManager(tmp_path).licensed  # persiste al reabrir
+    assert lm.licensed and LicenseManager(tmp_path).licensed  # persiste al reabrir
     lm.deactivate()
     assert not LicenseManager(tmp_path).licensed
+    # una licencia vencida se conserva para avisar, pero no da alta calidad
+    from descargo.core import licensing as L
+    key = create_license(keypair, "Cliente", machine_code(), "2020-01-01")
+    (tmp_path / "licencia.txt").write_text(key)
+    lm = LicenseManager(tmp_path)
+    assert not lm.licensed and lm.expired_license.expires == "2020-01-01"
 
 
 def test_private_key_never_in_repo():
@@ -92,11 +89,11 @@ def test_author_mode_requires_real_private_key(tmp_path, keypair):
     fake = ECC.generate(curve="ed25519").export_key(format="PEM")
     (tmp_path / licensing.PRIVATE_KEY_FILENAME).write_text(fake)
     lm = LicenseManager(tmp_path)
-    assert not lm.is_author and not lm.licensed and lm.remaining_today() == FREE_DAILY_LIMIT
+    assert not lm.is_author and not lm.licensed
     # la llave real (la que corresponde a la pública de la app) sí
     (tmp_path / licensing.PRIVATE_KEY_FILENAME).write_text(keypair)
     lm = LicenseManager(tmp_path)
-    assert lm.is_author and lm.licensed and lm.remaining_today() is None
+    assert lm.is_author and lm.licensed
     (tmp_path / licensing.PRIVATE_KEY_FILENAME).write_text("basura")
     assert not LicenseManager(tmp_path).is_author
 

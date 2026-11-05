@@ -14,6 +14,7 @@ from ..config import Settings
 from ..core.models import (AUDIO_BITRATES, AUDIO_FORMATS, AUDIO_FORMATS_WITH_BITRATE,
                            PLAYLIST_HEIGHT_PRESETS, VIDEO_CONTAINERS, DownloadRequest,
                            MediaInfo, resolution_name)
+from ..core.licensing import PREMIUM_AUDIO_FORMATS, STANDARD_MAX_KBPS, STANDARD_MAX_RES
 from ..utils import human_duration, human_size
 from .widgets import ElidedLabel
 
@@ -35,12 +36,15 @@ def lang_label(code: str) -> str:
 
 
 class OptionsDialog(QDialog):
-    def __init__(self, info: MediaInfo, settings: Settings, parent: QWidget | None = None):
+    def __init__(self, info: MediaInfo, settings: Settings, parent: QWidget | None = None,
+                 premium: bool = True):
         super().__init__(parent)
         self.info = info
         self.settings = settings
+        self.premium = premium  # False = calidad estándar (sin licencia activa)
         self.requests: list[DownloadRequest] = []
         self.want_playlist = False
+        self.want_license = False
         self.setWindowTitle("Opciones de descarga — DescarGO")
         self.setMinimumWidth(640)
         self.resize(700, 860 if not info.is_playlist else 900)
@@ -51,6 +55,8 @@ class OptionsDialog(QDialog):
         root.setContentsMargins(22, 20, 22, 18)
         root.setSpacing(14)
         root.addWidget(self._header())
+        if not premium:
+            root.addWidget(self._plan_notice())
 
         # Video / Audio
         kind_row = QHBoxLayout()
@@ -147,6 +153,28 @@ class OptionsDialog(QDialog):
             reply.finished.connect(lambda r=reply: self._thumb_loaded(r))
         return card
 
+    def _plan_notice(self) -> QWidget:
+        card = QFrame()
+        card.setObjectName("NoticeCard")
+        row = QHBoxLayout(card)
+        row.setContentsMargins(14, 8, 8, 8)
+        text = QLabel(f"🔒  Calidad estándar: video hasta {STANDARD_MAX_RES}p y audio hasta "
+                      f"{STANDARD_MAX_KBPS} kbps. HD, 4K y 320 kbps requieren licencia.")
+        text.setWordWrap(True)
+        row.addWidget(text, 1)
+        btn = QPushButton("Obtener licencia")
+        btn.setObjectName("Small")
+        btn.clicked.connect(self._ask_license)
+        row.addWidget(btn)
+        return card
+
+    def _ask_license(self) -> None:
+        self.want_license = True
+        self.reject()
+
+    def _locked(self, short_side: int | None) -> bool:
+        return not self.premium and (short_side is None or short_side > STANDARD_MAX_RES)
+
     def _thumb_loaded(self, reply: QNetworkReply) -> None:
         if reply.error() == QNetworkReply.NoError:
             pix = QPixmap()
@@ -173,33 +201,51 @@ class OptionsDialog(QDialog):
         grid.setContentsMargins(0, 0, 6, 0)
         grid.setSpacing(6)
         self._quality_group = QButtonGroup(self)
-        self._quality_values: dict[int, tuple[int | None, bool | None, bool | None]] = {}
+        # valor: (alto, 60fps, HDR, lado corto)
+        self._quality_values: dict[int, tuple[int | None, bool | None, bool | None, int | None]] = {}
 
         choices: list[tuple[str, str, tuple]] = []
         if self.info.is_playlist or not self.info.video_options:
             for h in PLAYLIST_HEIGHT_PRESETS:
                 name = "Máxima calidad disponible" if h is None else f"{resolution_name(h)} · hasta {h}p"
-                choices.append((name, "", (h, None, None)))
+                choices.append((name, "", (h, None, None, h)))
         else:
             for opt in self.info.video_options:
                 size = f"~ {human_size(opt.est_size)}" if opt.est_size else ""
-                choices.append((opt.label, size, (opt.height, opt.hfr, opt.hdr)))
+                choices.append((opt.label, size, (opt.height, opt.hfr, opt.hdr, opt.label_res)))
 
         wanted = last.get("video_height")
-        selected_index = 0
+        selected_index = None
         best_gap = None
         for idx, (name, size, value) in enumerate(choices):
-            rb = QRadioButton(f"{name}" + (f"      {size}" if size else ""))
+            locked = self._locked(value[3])
+            text = f"{name}" + (f"      {size}" if size and not locked else "")
+            rb = QRadioButton(text + ("      🔒 Licencia" if locked else ""))
             rb.setObjectName("QualityOption")
             rb.setCursor(Qt.PointingHandCursor)
+            rb.setEnabled(not locked)
             self._quality_group.addButton(rb, idx)
             self._quality_values[idx] = value
             grid.addWidget(rb)
+            if locked:
+                continue
+            if selected_index is None:
+                selected_index = idx
             h = value[0]
             if isinstance(wanted, int) and h:
                 gap = abs(h - wanted)
                 if best_gap is None or gap < best_gap:
                     best_gap, selected_index = gap, idx
+        if selected_index is None and not self.premium:
+            # todas las calidades de este video son altas: se ofrece la versión estándar
+            idx = len(choices)
+            rb = QRadioButton(f"Estándar · hasta {STANDARD_MAX_RES}p (la mejor disponible)")
+            rb.setObjectName("QualityOption")
+            self._quality_group.addButton(rb, idx)
+            self._quality_values[idx] = (None, None, None, STANDARD_MAX_RES)
+            grid.insertWidget(0, rb)
+            selected_index = idx
+        selected_index = selected_index or 0
         grid.addStretch(1)
         if self._quality_group.button(selected_index):
             self._quality_group.button(selected_index).setChecked(True)
@@ -258,14 +304,31 @@ class OptionsDialog(QDialog):
         self.cmb_audio_fmt = QComboBox()
         for key, text in AUDIO_FORMATS.items():
             self.cmb_audio_fmt.addItem(text, key)
-        self.cmb_audio_fmt.setCurrentIndex(max(0, self.cmb_audio_fmt.findData(last.get("audio_format", "original"))))
+        wanted_fmt = last.get("audio_format", "original")
+        if not self.premium:
+            for i in range(self.cmb_audio_fmt.count()):
+                if self.cmb_audio_fmt.itemData(i) in PREMIUM_AUDIO_FORMATS:
+                    item = self.cmb_audio_fmt.model().item(i)
+                    item.setEnabled(False)
+                    item.setText(item.text().replace(" — recomendado", "") + "  🔒 Licencia")
+            if wanted_fmt in PREMIUM_AUDIO_FORMATS:
+                wanted_fmt = "mp3"
+        self.cmb_audio_fmt.setCurrentIndex(max(0, self.cmb_audio_fmt.findData(wanted_fmt)))
         form.addWidget(self.cmb_audio_fmt, 0, 1)
 
         form.addWidget(QLabel("Calidad"), 1, 0)
         self.cmb_bitrate = QComboBox()
         for br in AUDIO_BITRATES:
             self.cmb_bitrate.addItem(f"{br} kbps", br)
-        self.cmb_bitrate.setCurrentIndex(max(0, self.cmb_bitrate.findData(last.get("audio_bitrate", 192))))
+        wanted_br = last.get("audio_bitrate", 192)
+        if not self.premium:
+            for i in range(self.cmb_bitrate.count()):
+                if self.cmb_bitrate.itemData(i) > STANDARD_MAX_KBPS:
+                    item = self.cmb_bitrate.model().item(i)
+                    item.setEnabled(False)
+                    item.setText(item.text() + "  🔒 Licencia")
+            wanted_br = min(wanted_br, STANDARD_MAX_KBPS)
+        self.cmb_bitrate.setCurrentIndex(max(0, self.cmb_bitrate.findData(wanted_br)))
         form.addWidget(self.cmb_bitrate, 1, 1)
         form.setColumnStretch(1, 1)
         lay.addLayout(form)
@@ -360,8 +423,12 @@ class OptionsDialog(QDialog):
             req.audio_bitrate = self.cmb_bitrate.currentData()
         else:
             req.kind = "video"
-            height, fps60, hdr = self._quality_values.get(self._quality_group.checkedId(), (None, None, None))
+            height, fps60, hdr, short = self._quality_values.get(
+                self._quality_group.checkedId(), (None, None, None, None))
             req.video_height, req.video_fps60, req.video_hdr = height, fps60, hdr
+            if not self.premium:
+                req.video_height = short  # en estándar se limita por el lado corto
+                req.quality_cap = STANDARD_MAX_RES
             req.container = self.cmb_container.currentData()
             req.subtitles = [self.subs_list.item(i).data(Qt.UserRole)
                              for i in range(self.subs_list.count())

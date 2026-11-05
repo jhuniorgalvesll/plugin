@@ -1,7 +1,8 @@
 """Licencias de DescarGO.
 
-- Plan gratuito: FREE_DAILY_LIMIT descargas completadas por día.
-- Con licencia: descargas ilimitadas.
+- Sin licencia activa (gratis o vencida): descargas ilimitadas en calidad estándar
+  (video hasta STANDARD_MAX_RES p, audio hasta STANDARD_MAX_KBPS kbps).
+- Con licencia: alta calidad (HD, Full HD, 4K, 60fps, HDR, audio 320 kbps, FLAC, original).
 
 Cada licencia está firmada digitalmente (Ed25519) con la llave privada del autor y
 va ligada al «código de equipo» del comprador. La app solo contiene la llave
@@ -24,7 +25,9 @@ from pathlib import Path
 
 from ..utils import IS_MAC, IS_WINDOWS, app_data_dir, subprocess_flags
 
-FREE_DAILY_LIMIT = 10
+STANDARD_MAX_RES = 480        # lado corto del video (480p; en verticales 480x854)
+STANDARD_MAX_KBPS = 128       # audio
+PREMIUM_AUDIO_FORMATS = {"original", "flac", "wav"}
 LICENSE_PREFIX = "DGO1-"
 
 PUBLIC_KEY_PEM = """-----BEGIN PUBLIC KEY-----
@@ -125,7 +128,7 @@ def create_license(private_key_pem: str, name: str, machine: str, expires: str |
     return LICENSE_PREFIX + _b64e(payload) + "." + _b64e(signature)
 
 
-def verify_license(text: str, machine: str | None = None) -> License:
+def verify_license(text: str, machine: str | None = None, allow_expired: bool = False) -> License:
     """Comprueba firma, equipo y vencimiento. Lanza LicenseError si algo falla."""
     from Cryptodome.PublicKey import ECC
     from Cryptodome.Signature import eddsa
@@ -144,9 +147,24 @@ def verify_license(text: str, machine: str | None = None) -> License:
                   expires=data.get("e"), issued=str(data.get("i", "")), key=text)
     if lic.machine != (machine or machine_code()):
         raise LicenseError("Esta licencia pertenece a otro equipo.")
-    if lic.expired:
+    if lic.expired and not allow_expired:
         raise LicenseError(f"La licencia venció el {lic.expires}.")
     return lic
+
+
+def apply_standard_quality(req) -> bool:
+    """Limita una descarga a calidad estándar. Devuelve True si cambió algo."""
+    changed = req.quality_cap != STANDARD_MAX_RES
+    req.quality_cap = STANDARD_MAX_RES
+    if req.kind == "audio":
+        if req.audio_format in PREMIUM_AUDIO_FORMATS:
+            req.audio_format, changed = "mp3", True
+        if req.audio_bitrate > STANDARD_MAX_KBPS:
+            req.audio_bitrate, changed = STANDARD_MAX_KBPS, True
+    else:
+        req.video_hdr = None
+        req.video_fps60 = None
+    return changed
 
 
 # ---------------------------------------------------------------------------
@@ -166,8 +184,9 @@ class LicenseManager:
     def load(self) -> None:
         self.license = None
         if self._license_file.is_file():
-            try:
-                self.license = verify_license(self._license_file.read_text(encoding="utf-8"))
+            try:  # se conserva aunque esté vencida, para avisar al usuario
+                self.license = verify_license(self._license_file.read_text(encoding="utf-8"),
+                                              allow_expired=True)
             except LicenseError:
                 self.license = None
 
@@ -202,40 +221,23 @@ class LicenseManager:
 
     @property
     def licensed(self) -> bool:
+        """Alta calidad habilitada (autor o licencia vigente)."""
         if self.is_author:
             return True
         return self.license is not None and not self.license.expired
 
-    # -- contador diario --------------------------------------------------------
-    def _check(self, day: str, count: int) -> str:
-        return hashlib.sha256(f"{machine_code()}|{day}|{count}|dgo".encode()).hexdigest()[:16]
+    @property
+    def expired_license(self) -> License | None:
+        if self.license is not None and self.license.expired and not self.is_author:
+            return self.license
+        return None
 
-    def used_today(self) -> int:
-        today = date.today().isoformat()
-        try:
-            data = json.loads(self._usage_file.read_text(encoding="utf-8"))
-        except (OSError, ValueError):
-            return 0
-        if data.get("d") != today:
-            return 0
-        count = int(data.get("c", 0))
-        if data.get("h") != self._check(today, count):
-            return FREE_DAILY_LIMIT  # archivo manipulado: se considera agotado por hoy
-        return count
-
-    def record_download(self) -> None:
+    def enforce(self, req) -> bool:
+        """Aplica el plan a una descarga. True si se redujo la calidad."""
         if self.licensed:
-            return
-        today = date.today().isoformat()
-        count = self.used_today() + 1
-        self._usage_file.write_text(json.dumps({"d": today, "c": count, "h": self._check(today, count)}),
-                                    encoding="utf-8")
-
-    def remaining_today(self) -> int | None:
-        """None = ilimitado (con licencia)."""
-        if self.licensed:
-            return None
-        return max(0, FREE_DAILY_LIMIT - self.used_today())
+            req.quality_cap = None
+            return False
+        return apply_standard_quality(req)
 
     # -- generador (solo autor) ---------------------------------------------------
     def private_key(self) -> str | None:

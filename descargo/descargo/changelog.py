@@ -1,6 +1,15 @@
 """Novedades de cada versión (se muestran en la app y en GitHub Releases)."""
 
 CHANGELOG: list[tuple[str, list[str]]] = [
+    ("1.4.0", [
+        "♾️ Descargas sin límite diario para todos.",
+        "🔒 Sin licencia activa (plan gratuito o licencia vencida) las descargas son en calidad "
+        "estándar: video hasta 480p y audio hasta 128 kbps.",
+        "💎 Con licencia: alta calidad — HD, Full HD, 2K, 4K, 60fps, HDR, audio 320 kbps, FLAC "
+        "y audio original.",
+        "⏰ Cuando una licencia vence, la app avisa y sigue descargando en calidad estándar "
+        "hasta que la renueves.",
+    ]),
     ("1.3.2", [
         "👑 Activa el modo autor desde la app: en «Licencia» toca «Soy el autor: cargar mi llave» "
         "y elige tu archivo. Aparece al instante el menú «Generar licencias».",

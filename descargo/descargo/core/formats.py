@@ -23,6 +23,8 @@ _FORMAT_SORT = {
     "webm": ["res", "fps", "vcodec:vp9", "acodec:opus"],
     "mkv": ["res", "fps"],
 }
+_STD_ABR = 130  # tope de audio en calidad estándar (128 kbps + margen de redondeo)
+
 # Formatos que admiten portada incrustada.
 _COVER_AUDIO = {"original", "mp3", "m4a", "opus", "ogg", "flac"}
 _COVER_VIDEO = {"mp4", "mkv"}
@@ -98,6 +100,8 @@ def build_ydl_options(
 
     if req.kind == "audio":
         opts["format"] = "ba/b"
+        if req.quality_cap:
+            opts["format_sort"] = [f"abr:{_STD_ABR}"]
         codec = _AUDIO_CODEC.get(req.audio_format, "best")
         quality = str(req.audio_bitrate) if req.audio_format in AUDIO_FORMATS_WITH_BITRATE else "0"
         pps.append({"key": "FFmpegExtractAudio", "preferredcodec": codec, "preferredquality": quality})
@@ -107,8 +111,15 @@ def build_ydl_options(
         return opts
 
     container = req.container if req.container in _MERGE_FORMAT else "mp4"
-    opts["format"] = video_selector(req.video_height, req.video_fps60, req.video_hdr)
-    opts["format_sort"] = list(_FORMAT_SORT[container])
+    if req.quality_cap:
+        # Calidad estándar: «res» ordena por el lado corto (sirve igual para videos verticales)
+        # y prefiere lo más alto SIN pasar el tope; el audio, hasta ~128 kbps.
+        limit = min(req.quality_cap, req.video_height or req.quality_cap)
+        opts["format"] = "bv*+ba/b"
+        opts["format_sort"] = [f"res:{limit}", f"abr:{_STD_ABR}"] + _FORMAT_SORT[container][1:]
+    else:
+        opts["format"] = video_selector(req.video_height, req.video_fps60, req.video_hdr)
+        opts["format_sort"] = list(_FORMAT_SORT[container])
     opts["merge_output_format"] = _MERGE_FORMAT[container]
     pps.append({"key": "FFmpegMetadata", "add_metadata": True})
     if embed_thumbnail and container in _COVER_VIDEO:

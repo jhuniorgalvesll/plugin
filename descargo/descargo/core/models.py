@@ -106,11 +106,16 @@ class DownloadRequest:
     embed_subtitles: bool = False
     dest_dir: str = ""
     thumbnail: str = ""
+    # Plan estándar (sin licencia activa): lado corto máximo del video, p. ej. 480.
+    quality_cap: int | None = None
     job_id: str = field(default_factory=lambda: uuid.uuid4().hex[:12])
     prefetched_info: dict | None = field(default=None, repr=False, compare=False)
 
     @property
     def quality_label(self) -> str:
+        if self.quality_cap and self.kind == "video":
+            res = min(self.quality_cap, self.video_height or self.quality_cap)
+            return f"Estándar {res}p {self.container.upper()}"
         if self.kind == "audio":
             if self.audio_format in AUDIO_FORMATS_WITH_BITRATE:
                 return f"{self.audio_format.upper()} {self.audio_bitrate} kbps"
