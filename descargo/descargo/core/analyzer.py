@@ -10,6 +10,7 @@ from typing import Any
 
 from . import policy
 from .formats import QuietLogger
+from .titles import smart_title
 from .models import MediaInfo, PlaylistEntry, VideoOption
 
 PLATFORM_NAMES = {
@@ -210,7 +211,7 @@ def _ydl_params(cookies_browser: str = "", single: bool = True) -> dict[str, Any
 def info_to_media(url: str, info: dict) -> MediaInfo:
     """Convierte la respuesta de yt-dlp en un MediaInfo (sin red, fácil de probar)."""
     policy.check_info(info)
-    title = info.get("title") or info.get("id") or "Sin título"
+    title = smart_title(info) if info.get("_type") != "playlist" else (info.get("title") or "Lista")
     platform = platform_name(info)
 
     if info.get("_type") == "playlist":
@@ -223,7 +224,7 @@ def info_to_media(url: str, info: dict) -> MediaInfo:
                 continue
             if policy.is_paid_url(link):
                 continue
-            entries.append(PlaylistEntry(url=link, title=entry.get("title") or link,
+            entries.append(PlaylistEntry(url=link, title=smart_title(entry) if entry.get("title") else link,
                                          duration=entry.get("duration"),
                                          thumbnail=_thumbnail(entry)))
         if not entries:

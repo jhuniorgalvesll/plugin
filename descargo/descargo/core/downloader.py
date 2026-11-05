@@ -17,6 +17,7 @@ from ..utils import quarantine_dir, safe_folder_name, unique_path
 from . import policy
 from .analyzer import friendly_error
 from .formats import build_ydl_options
+from .titles import smart_title
 from .models import DownloadRequest
 from .security import (CLEAN, MEDIA_EXTS, SUSPICIOUS, THREAT, ScanReport,
                        SecurityScanner, worst_verdict)
@@ -194,6 +195,9 @@ class DownloadJob:
             else:
                 info = ydl.extract_info(self.request.url, download=False)
             policy.check_info(ydl.sanitize_info(info) or {})
+            if info.get("_type") in (None, "video"):
+                # título real (Instagram «Video by…», Facebook con estadísticas, etc.)
+                info["title"] = smart_title(info)
             if self.stop_requested:
                 raise yt_dlp.utils.DownloadCancelled("detenido")
             ydl.process_ie_result(info, download=True)

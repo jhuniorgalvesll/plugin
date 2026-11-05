@@ -70,7 +70,8 @@ def build_ydl_options(
 ) -> dict:
     opts: dict[str, Any] = {
         "paths": {"home": workdir, "temp": workdir},
-        "outtmpl": {"default": "%(title).150B [%(id)s].%(ext)s"},
+        # Nombre = título original (sin códigos). Si se repite, se agrega (1), (2)… al entregar.
+        "outtmpl": {"default": "%(title).150B.%(ext)s"},
         "windowsfilenames": True,
         "noplaylist": True,
         "continuedl": True,

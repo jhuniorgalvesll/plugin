@@ -1,6 +1,13 @@
 """Novedades de cada versión (se muestran en la app y en GitHub Releases)."""
 
 CHANGELOG: list[tuple[str, list[str]]] = [
+    ("1.2.1", [
+        "🏷️ Los archivos se guardan con el título original del video en todas las plataformas. "
+        "En Instagram (que solo dice «Video by usuario») se usa el texto real de la publicación; "
+        "en Facebook se quitan las visualizaciones y reacciones del título.",
+        "✂️ El nombre del archivo ya no lleva el código entre corchetes (por ejemplo [DbcCW3SxF3Y]). "
+        "Si el nombre se repite, se agrega (1), (2)…",
+    ]),
     ("1.2.0", [
         "⚡ Análisis mucho más rápido: los enlaces de YouTube con «&list=…» (por ejemplo, las "
         "listas Mix) ahora analizan solo el video. Si quieres la lista completa, hay un botón "
