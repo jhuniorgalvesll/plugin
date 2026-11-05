@@ -4,20 +4,34 @@ from ..utils import ASSETS_DIR
 
 CHECK_ICON = (ASSETS_DIR / "check.svg").as_posix()
 
-ACCENT = "#4F7CFF"
-ACCENT_2 = "#7C5CFF"
-BG = "#0E111C"
-SURFACE = "#161A2B"
-SURFACE_2 = "#1E2338"
-BORDER = "#2A3150"
-TEXT = "#E8EBF7"
-MUTED = "#8E96BA"
-SUCCESS = "#22C55E"
-WARNING = "#F5A524"
-DANGER = "#F04F5F"
-YAPE = "#742284"
+PALETTES = {
+    "light": {
+        "ACCENT": "#3D6BFF", "ACCENT_2": "#6E4CF5", "BG": "#F3F5FA", "SURFACE": "#FFFFFF",
+        "SURFACE_2": "#F0F2F8", "BORDER": "#DCE1EC", "TEXT": "#1A1F36", "MUTED": "#69718F",
+        "SUCCESS": "#16A34A", "WARNING": "#E08E0B", "DANGER": "#E5394B", "YAPE": "#742284",
+    },
+    "dark": {
+        "ACCENT": "#4F7CFF", "ACCENT_2": "#7C5CFF", "BG": "#0E111C", "SURFACE": "#161A2B",
+        "SURFACE_2": "#1E2338", "BORDER": "#2A3150", "TEXT": "#E8EBF7", "MUTED": "#8E96BA",
+        "SUCCESS": "#22C55E", "WARNING": "#F5A524", "DANGER": "#F04F5F", "YAPE": "#742284",
+    },
+}
+THEMES = {"light": "Claro", "dark": "Oscuro"}
+_current = "light"
 
-STYLESHEET = f"""
+
+def accent() -> str:
+    return PALETTES[_current]["ACCENT"]
+
+
+def build_stylesheet(theme: str = "light") -> str:
+    global _current
+    _current = theme if theme in PALETTES else "light"
+    p = PALETTES[_current]
+    ACCENT, ACCENT_2, BG, SURFACE = p["ACCENT"], p["ACCENT_2"], p["BG"], p["SURFACE"]
+    SURFACE_2, BORDER, TEXT, MUTED = p["SURFACE_2"], p["BORDER"], p["TEXT"], p["MUTED"]
+    SUCCESS, WARNING, DANGER, YAPE = p["SUCCESS"], p["WARNING"], p["DANGER"], p["YAPE"]
+    return f"""
 * {{
     font-family: "Segoe UI", "Inter", "Helvetica Neue", Arial, sans-serif;
     font-size: 10pt;
@@ -37,6 +51,7 @@ QLabel#Badge {{
     border-radius: 9px; padding: 2px 10px; font-size: 8.5pt;
 }}
 QLabel#EmptyState {{ color: {MUTED}; font-size: 11pt; }}
+QLabel#Thumb {{ background: {SURFACE_2}; border: 1px solid {BORDER}; border-radius: 8px; font-size: 24pt; }}
 
 QFrame#Card {{
     background: {SURFACE}; border: 1px solid {BORDER}; border-radius: 14px;
@@ -77,9 +92,10 @@ QPushButton#Primary {{
     border: none; color: white; padding: 11px 22px;
 }}
 QPushButton#Primary:hover {{
-    background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #6A90FF, stop:1 #9077FF);
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 {ACCENT_2}, stop:1 {ACCENT});
 }}
 QPushButton#Primary:disabled {{ background: {BORDER}; color: {MUTED}; }}
+QPushButton#Primary, QPushButton#Coffee {{ color: #FFFFFF; }}
 QPushButton#Ghost {{ background: transparent; border: 1px solid transparent; padding: 7px 10px; }}
 QPushButton#Ghost:hover {{ background: {SURFACE_2}; border-color: {BORDER}; }}
 QPushButton#Coffee {{

@@ -27,6 +27,7 @@ class Settings:
     quick_mode: bool = False
     last_choice: dict = field(default_factory=dict)
     clipboard_watch: bool = True
+    theme: str = "light"  # "light" | "dark"
     accepted_terms: bool = False
 
     # Red (respeto a las plataformas)
@@ -68,6 +69,8 @@ class Settings:
         self.sleep_between = max(0, min(int(self.sleep_between), 60))
         if self.threat_action not in ("delete", "quarantine"):
             self.threat_action = "delete"
+        if self.theme not in ("light", "dark"):
+            self.theme = "light"
         if self.cookies_browser not in COOKIE_BROWSERS:
             self.cookies_browser = ""
 

@@ -31,13 +31,13 @@ def main() -> int:
 
     from .ui.dialogs import TermsDialog
     from .ui.main_window import MainWindow
-    from .ui.theme import STYLESHEET
+    from .ui.theme import build_stylesheet
     from .ui.widgets import app_icon
 
-    app.setStyleSheet(STYLESHEET)
+    settings = Settings.load()
+    app.setStyleSheet(build_stylesheet(settings.theme))
     app.setWindowIcon(app_icon())
 
-    settings = Settings.load()
     if not settings.accepted_terms:
         if TermsDialog().exec() != QDialog.Accepted:
             return 0

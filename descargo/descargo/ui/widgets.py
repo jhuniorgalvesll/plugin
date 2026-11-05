@@ -12,6 +12,7 @@ from ..core.downloader import (STATUS_BLOCKED, STATUS_CANCELLED, STATUS_DONE, ST
                                STATUS_PAUSED, STATUS_SUSPICIOUS, STATUS_THREAT, JobResult)
 from ..core.models import DownloadRequest
 from ..utils import ASSETS_DIR, human_duration, human_size, human_speed
+from .theme import accent
 
 LOGO_PATH = ASSETS_DIR / "descargo.svg"
 
@@ -37,7 +38,7 @@ def app_icon() -> QIcon:
 def brand_label(font_pt: int = 20) -> QLabel:
     label = QLabel(
         f'<span style="font-size:{font_pt}pt; font-weight:700;">Descar</span>'
-        f'<span style="font-size:{font_pt}pt; font-weight:800; color:#6E8BFF;">GO</span>'
+        f'<span style="font-size:{font_pt}pt; font-weight:800; color:{accent()};">GO</span>'
     )
     label.setTextFormat(Qt.RichText)
     return label

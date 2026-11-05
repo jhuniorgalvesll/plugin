@@ -107,7 +107,7 @@ class OptionsDialog(QDialog):
         self.thumb = QLabel("🎞")
         self.thumb.setFixedSize(160, 90)
         self.thumb.setAlignment(Qt.AlignCenter)
-        self.thumb.setStyleSheet("background:#1E2338; border-radius:8px; font-size:24pt;")
+        self.thumb.setObjectName("Thumb")
         row.addWidget(self.thumb)
         col = QVBoxLayout()
         title = ElidedLabel(self.info.title)

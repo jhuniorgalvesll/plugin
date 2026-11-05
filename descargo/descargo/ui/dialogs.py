@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from PySide6.QtCore import Qt, QTimer, QUrl
 from PySide6.QtGui import QDesktopServices, QGuiApplication
-from PySide6.QtWidgets import (QCheckBox, QComboBox, QDialog, QFileDialog, QFormLayout,
+from PySide6.QtWidgets import (QApplication, QCheckBox, QComboBox, QDialog, QFileDialog, QFormLayout,
                                QFrame, QHBoxLayout, QLabel, QLineEdit, QPlainTextEdit,
                                QPushButton, QRadioButton, QSpinBox, QTabWidget, QVBoxLayout,
                                QWidget)
@@ -14,6 +14,7 @@ from .. import (APP_NAME, APP_TAGLINE, APP_VERSION, COPYRIGHT_OWNER, COPYRIGHT_T
 from ..config import COOKIE_BROWSERS, Settings
 from ..core.security import detect_antivirus
 from ..utils import find_ffmpeg_dir
+from .theme import THEMES, build_stylesheet
 from .widgets import brand_label, logo_pixmap
 
 
@@ -123,7 +124,7 @@ class AboutDialog(QDialog):
         r_lay.setContentsMargins(16, 14, 16, 14)
         r_lay.addWidget(_wrap(f"<b>{COPYRIGHT_TEXT}</b>"))
         r_lay.addWidget(_wrap(
-            f'Desarrollado por <a style="color:#6E8BFF" href="{COPYRIGHT_WEBSITE}">{COPYRIGHT_OWNER}</a>. '
+            f'Desarrollado por <a href="{COPYRIGHT_WEBSITE}">{COPYRIGHT_OWNER}</a>. '
             "Queda prohibida la reproducción, distribución o modificación de este software "
             "sin autorización del titular.", muted=True))
         root.addWidget(rights)
@@ -264,6 +265,11 @@ class SettingsDialog(QDialog):
         self.cb_quick = QCheckBox("Modo rápido: usar mi última elección sin abrir la ventana de opciones")
         self.cb_quick.setChecked(s.quick_mode)
         form.addRow("", self.cb_quick)
+        self.cmb_theme = QComboBox()
+        for key, name in THEMES.items():
+            self.cmb_theme.addItem(name, key)
+        self.cmb_theme.setCurrentIndex(max(0, self.cmb_theme.findData(s.theme)))
+        form.addRow("Apariencia", self.cmb_theme)
         self.cb_clip = QCheckBox("Detectar enlaces copiados en el portapapeles")
         self.cb_clip.setChecked(s.clipboard_watch)
         form.addRow("", self.cb_clip)
@@ -329,7 +335,7 @@ class SettingsDialog(QDialog):
         form.addRow("Clave API", self.ed_vt)
         form.addRow("", _wrap(
             "Solo se envía la huella SHA-256 del archivo, nunca el archivo. "
-            'Obtén tu clave gratis en <a style="color:#6E8BFF" '
+            'Obtén tu clave gratis en <a '
             'href="https://www.virustotal.com/gui/join-us">virustotal.com</a>.', muted=True))
         self.rb_delete = QRadioButton("Eliminar el archivo")
         self.rb_quarantine = QRadioButton("Dejarlo aislado en cuarentena")
@@ -359,5 +365,7 @@ class SettingsDialog(QDialog):
         s.virustotal_key = self.ed_vt.text().strip()
         s.virustotal_enabled = self.cb_vt.isChecked() and bool(s.virustotal_key)
         s.threat_action = "quarantine" if self.rb_quarantine.isChecked() else "delete"
+        s.theme = self.cmb_theme.currentData()
         s.save()
+        QApplication.instance().setStyleSheet(build_stylesheet(s.theme))
         self.accept()
