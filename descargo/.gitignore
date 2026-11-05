@@ -1,0 +1,10 @@
+__pycache__/
+*.pyc
+.venv/
+venv/
+build/
+dist/
+.pytest_cache/
+# Binarios de FFmpeg: se descargan y verifican al compilar (build_windows.ps1)
+descargo/bin/*
+!descargo/bin/.gitkeep

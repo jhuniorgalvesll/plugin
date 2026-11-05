@@ -1,0 +1,56 @@
+name: DescarGO — compilar para Windows
+
+on:
+  push:
+    paths:
+      - "descargo/**"
+      - ".github/workflows/descargo-windows.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: descargo
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Dependencias del sistema
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg libegl1 libxkbcommon0
+      - name: Dependencias de Python
+        run: pip install -r requirements.txt pytest
+      - name: Pruebas
+        run: python -m pytest -q tests
+
+  build-windows:
+    needs: test
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: descargo
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Instalar Inno Setup
+        run: choco install innosetup -y --no-progress
+      - name: Compilar (FFmpeg verificado + PyInstaller + instalador)
+        shell: pwsh
+        run: ./build_windows.ps1
+      - name: Publicar instalador
+        uses: actions/upload-artifact@v4
+        with:
+          name: DescarGO-Setup-Windows
+          path: descargo/dist/DescarGO-Setup-*.exe
+      - name: Publicar versión portable
+        uses: actions/upload-artifact@v4
+        with:
+          name: DescarGO-Portable-Windows
+          path: descargo/dist/DescarGO/
