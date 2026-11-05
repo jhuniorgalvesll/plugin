@@ -67,6 +67,7 @@ class PlaylistEntry:
     url: str
     title: str
     duration: float | None = None
+    thumbnail: str = ""
 
 
 @dataclass

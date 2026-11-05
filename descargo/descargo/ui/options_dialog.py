@@ -361,7 +361,8 @@ class OptionsDialog(QDialog):
                 entry = item.data(Qt.UserRole)
                 self.requests.append(DownloadRequest.from_choice(
                     template.choice_dict(), url=entry.url, title=entry.title,
-                    platform=self.info.platform, dest_dir=template.dest_dir))
+                    platform=self.info.platform, dest_dir=template.dest_dir,
+                    thumbnail=entry.thumbnail))
             if not self.requests:
                 self.btn_ok.setText("Marca al menos un elemento")
                 return

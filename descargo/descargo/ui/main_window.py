@@ -7,11 +7,12 @@ from pathlib import Path
 
 from PySide6.QtCore import Qt, QThreadPool, QTimer, QUrl
 from PySide6.QtGui import QDesktopServices, QGuiApplication, QKeySequence, QShortcut
-from PySide6.QtWidgets import (QAbstractItemView, QFrame, QHBoxLayout, QHeaderView, QLabel,
+from PySide6.QtWidgets import (QAbstractItemView, QButtonGroup, QFrame, QHBoxLayout, QHeaderView, QLabel,
                                QLineEdit, QMainWindow, QMessageBox, QPushButton, QScrollArea,
-                               QTableWidget, QTableWidgetItem, QTabWidget, QVBoxLayout, QWidget)
+                               QStackedWidget, QTableWidget, QTableWidgetItem, QVBoxLayout,
+                               QWidget)
 
-from .. import APP_NAME, APP_TAGLINE, APP_VERSION, COPYRIGHT_TEXT
+from .. import APP_NAME, APP_TAGLINE, APP_VERSION, COPYRIGHT_YEAR
 from ..config import Settings
 from ..core import policy
 from ..core.downloader import (STATUS_CANCELLED, STATUS_DONE, STATUS_PAUSED, DownloadJob,
@@ -53,54 +54,100 @@ class MainWindow(QMainWindow):
         central = QWidget()
         central.setObjectName("Central")
         self.setCentralWidget(central)
-        root = QVBoxLayout(central)
-        root.setContentsMargins(24, 18, 24, 12)
+        outer = QHBoxLayout(central)
+        outer.setContentsMargins(0, 0, 0, 0)
+        outer.setSpacing(0)
+        outer.addWidget(self._sidebar())
+
+        content = QWidget()
+        root = QVBoxLayout(content)
+        root.setContentsMargins(26, 22, 26, 12)
         root.setSpacing(16)
-        root.addLayout(self._header())
+        self.page_title = QLabel("Descargas")
+        self.page_title.setObjectName("PageTitle")
+        root.addWidget(self.page_title)
         root.addWidget(self._url_card())
 
-        self.tabs = QTabWidget()
-        self.tabs.addTab(self._downloads_tab(), "Descargas")
-        self.tabs.addTab(self._history_tab(), "Historial")
-        self.tabs.currentChanged.connect(lambda i: i == 1 and self.refresh_history())
-        root.addWidget(self.tabs, 1)
+        self.pages = QStackedWidget()
+        self.pages.addWidget(self._downloads_tab())
+        self.pages.addWidget(self._history_tab())
+        root.addWidget(self.pages, 1)
+        outer.addWidget(content, 1)
+        self.show_page(0)
 
         status = self.statusBar()
-        status.addPermanentWidget(QLabel(f"{COPYRIGHT_TEXT}  ·  v{APP_VERSION}"))
+        status.addPermanentWidget(QLabel(f"{APP_NAME} v{APP_VERSION}"))
         self._show_ready_message()
 
         QGuiApplication.clipboard().dataChanged.connect(self._clipboard_changed)
         QShortcut(QKeySequence.Paste, self, activated=self._paste_shortcut)
 
     # -- construcción ----------------------------------------------------------
-    def _header(self) -> QHBoxLayout:
-        row = QHBoxLayout()
-        row.setSpacing(12)
+    def _sidebar(self) -> QFrame:
+        bar = QFrame()
+        bar.setObjectName("Sidebar")
+        bar.setFixedWidth(220)
+        lay = QVBoxLayout(bar)
+        lay.setContentsMargins(16, 20, 16, 16)
+        lay.setSpacing(4)
+
+        brand = QHBoxLayout()
+        brand.setSpacing(10)
         logo = QLabel()
-        logo.setPixmap(logo_pixmap(44))
-        row.addWidget(logo)
-        col = QVBoxLayout()
-        col.setSpacing(0)
-        col.addWidget(brand_label(20))
-        tag = QLabel("Video y audio de cualquier página pública · seguro y sin límites")
+        logo.setPixmap(logo_pixmap(38))
+        brand.addWidget(logo)
+        brand.addWidget(brand_label(17))
+        brand.addStretch(1)
+        lay.addLayout(brand)
+        tag = QLabel("Descarga y listo")
         tag.setObjectName("BrandTagline")
-        col.addWidget(tag)
-        row.addLayout(col)
-        row.addStretch(1)
+        tag.setContentsMargins(4, 2, 0, 18)
+        lay.addWidget(tag)
+
+        self.nav_group = QButtonGroup(self)
+        self.nav_downloads = self._nav_button("⬇   Descargas", checkable=True)
+        self.nav_history = self._nav_button("🕘   Historial", checkable=True)
+        self.nav_group.addButton(self.nav_downloads, 0)
+        self.nav_group.addButton(self.nav_history, 1)
+        self.nav_group.idClicked.connect(self.show_page)
+        nav_settings = self._nav_button("⚙   Ajustes")
+        nav_settings.clicked.connect(self.open_settings)
+        nav_about = self._nav_button("ⓘ   Acerca de")
+        nav_about.clicked.connect(lambda: AboutDialog(self).exec())
+        for b in (self.nav_downloads, self.nav_history, nav_settings, nav_about):
+            lay.addWidget(b)
+        lay.addStretch(1)
+
+        shield = QLabel("🛡  Cada descarga se analiza contra virus y malware")
+        shield.setObjectName("SidebarNote")
+        shield.setWordWrap(True)
+        lay.addWidget(shield)
+        lay.addSpacing(10)
         coffee = QPushButton("☕  Invítame un café")
         coffee.setObjectName("Coffee")
         coffee.setCursor(Qt.PointingHandCursor)
         coffee.clicked.connect(lambda: CoffeeDialog(self).exec())
-        settings = QPushButton("⚙  Ajustes")
-        settings.setObjectName("Ghost")
-        settings.clicked.connect(self.open_settings)
-        about = QPushButton("ⓘ  Acerca de")
-        about.setObjectName("Ghost")
-        about.clicked.connect(lambda: AboutDialog(self).exec())
-        for b in (settings, about, coffee):
-            b.setCursor(Qt.PointingHandCursor)
-            row.addWidget(b)
-        return row
+        lay.addWidget(coffee)
+        lay.addSpacing(8)
+        rights = QLabel(f"© {COPYRIGHT_YEAR} lliuya.pe\nTodos los derechos reservados")
+        rights.setObjectName("SidebarNote")
+        rights.setAlignment(Qt.AlignCenter)
+        lay.addWidget(rights)
+        return bar
+
+    def _nav_button(self, text: str, checkable: bool = False) -> QPushButton:
+        btn = QPushButton(text)
+        btn.setObjectName("NavButton")
+        btn.setCheckable(checkable)
+        btn.setCursor(Qt.PointingHandCursor)
+        return btn
+
+    def show_page(self, index: int) -> None:
+        self.pages.setCurrentIndex(index)
+        (self.nav_downloads if index == 0 else self.nav_history).setChecked(True)
+        self.page_title.setText("Descargas" if index == 0 else "Historial")
+        if index == 1:
+            self.refresh_history()
 
     def _url_card(self) -> QFrame:
         card = QFrame()
@@ -134,16 +181,13 @@ class MainWindow(QMainWindow):
             chip.setObjectName("Badge")
             chips.addWidget(chip)
         chips.addStretch(1)
-        shield = QLabel("🛡 Análisis antivirus en cada descarga")
-        shield.setProperty("muted", True)
-        chips.addWidget(shield)
         lay.addLayout(chips)
         return card
 
     def _downloads_tab(self) -> QWidget:
         page = QWidget()
         lay = QVBoxLayout(page)
-        lay.setContentsMargins(0, 10, 0, 0)
+        lay.setContentsMargins(0, 4, 0, 0)
         lay.setSpacing(10)
         tools = QHBoxLayout()
         self.lbl_counts = QLabel("")
@@ -332,7 +376,7 @@ class MainWindow(QMainWindow):
         if batch and skipped:
             self.statusBar().showMessage(
                 f"{added} en cola · {skipped} omitidos porque ya estaban descargados.", 8000)
-        self.tabs.setCurrentIndex(0)
+        self.show_page(0)
         self._update_counts()
 
     def _job_settings(self, delay: float = 0) -> JobSettings:

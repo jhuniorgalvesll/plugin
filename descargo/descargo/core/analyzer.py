@@ -162,7 +162,8 @@ def info_to_media(url: str, info: dict) -> MediaInfo:
             if policy.is_paid_url(link):
                 continue
             entries.append(PlaylistEntry(url=link, title=entry.get("title") or link,
-                                         duration=entry.get("duration")))
+                                         duration=entry.get("duration"),
+                                         thumbnail=_thumbnail(entry)))
         if not entries:
             raise AnalysisError("La lista no contiene videos públicos disponibles.")
         return MediaInfo(url=url, title=title, platform=platform,

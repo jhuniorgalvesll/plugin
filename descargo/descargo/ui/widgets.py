@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
-from PySide6.QtCore import QSize, Qt, Signal
-from PySide6.QtGui import QIcon, QPainter, QPixmap
+from PySide6.QtCore import QSize, Qt, QUrl, Signal
+from PySide6.QtGui import QIcon, QPainter, QPainterPath, QPixmap
+from PySide6.QtNetwork import QNetworkAccessManager, QNetworkReply, QNetworkRequest
 from PySide6.QtSvg import QSvgRenderer
 from PySide6.QtWidgets import (QFrame, QHBoxLayout, QLabel, QProgressBar, QPushButton,
                                QSizePolicy, QVBoxLayout, QWidget)
@@ -42,6 +43,47 @@ def brand_label(font_pt: int = 20) -> QLabel:
     )
     label.setTextFormat(Qt.RichText)
     return label
+
+
+_net: QNetworkAccessManager | None = None
+
+
+def _rounded(pix: QPixmap, w: int, h: int, radius: int = 8) -> QPixmap:
+    scaled = pix.scaled(w * 2, h * 2, Qt.KeepAspectRatioByExpanding, Qt.SmoothTransformation)
+    out = QPixmap(w * 2, h * 2)
+    out.fill(Qt.transparent)
+    painter = QPainter(out)
+    painter.setRenderHint(QPainter.Antialiasing)
+    path = QPainterPath()
+    path.addRoundedRect(0, 0, w * 2, h * 2, radius * 2, radius * 2)
+    painter.setClipPath(path)
+    painter.drawPixmap((w * 2 - scaled.width()) // 2, (h * 2 - scaled.height()) // 2, scaled)
+    painter.end()
+    out.setDevicePixelRatio(2)
+    return out
+
+
+def load_thumbnail(url: str, label: QLabel) -> None:
+    """Descarga la miniatura en segundo plano y la muestra con esquinas redondeadas."""
+    global _net
+    if not url or not url.startswith("http"):
+        return
+    if _net is None:
+        _net = QNetworkAccessManager()
+    reply = _net.get(QNetworkRequest(QUrl(url)))
+
+    def done() -> None:
+        try:
+            if reply.error() == QNetworkReply.NoError:
+                pix = QPixmap()
+                if pix.loadFromData(reply.readAll()):
+                    label.setPixmap(_rounded(pix, label.width(), label.height()))
+                    label.setText("")
+        except RuntimeError:  # la tarjeta ya se cerró
+            pass
+        reply.deleteLater()
+
+    reply.finished.connect(done)
 
 
 def repolish(widget: QWidget) -> None:
@@ -93,13 +135,15 @@ class DownloadItem(QFrame):
         self.setObjectName("ItemCard")
 
         icon = QLabel("🎵" if request.kind == "audio" else "🎬")
-        icon.setStyleSheet("font-size: 20pt;")
-        icon.setFixedWidth(42)
+        icon.setObjectName("ItemThumb")
+        icon.setFixedSize(128, 72)
         icon.setAlignment(Qt.AlignCenter)
+        load_thumbnail(request.thumbnail, icon)
 
         self.title = ElidedLabel(request.title)
         self.title.setStyleSheet("font-weight: 600; font-size: 10.5pt;")
-        meta = QLabel(f"{request.platform}  ·  {request.quality_label}")
+        kind = "Audio" if request.kind == "audio" else "Video"
+        meta = QLabel(f"{request.platform}  ·  {kind}  ·  {request.quality_label}")
         meta.setProperty("muted", True)
 
         self.progress = QProgressBar()
@@ -121,16 +165,6 @@ class DownloadItem(QFrame):
         for b in (self.btn_resume, self.btn_open, self.btn_release, self.btn_report, self.btn_remove):
             b.hide()
 
-        text_col = QVBoxLayout()
-        text_col.setSpacing(4)
-        text_col.addWidget(self.title)
-        text_col.addWidget(meta)
-
-        top = QHBoxLayout()
-        top.setSpacing(12)
-        top.addWidget(icon)
-        top.addLayout(text_col, 1)
-
         bottom = QHBoxLayout()
         bottom.setSpacing(6)
         bottom.addWidget(self.status, 1)
@@ -138,12 +172,18 @@ class DownloadItem(QFrame):
                   self.btn_resume, self.btn_cancel, self.btn_remove):
             bottom.addWidget(b)
 
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(14, 12, 14, 12)
-        layout.setSpacing(8)
-        layout.addLayout(top)
-        layout.addWidget(self.progress)
-        layout.addLayout(bottom)
+        col = QVBoxLayout()
+        col.setSpacing(6)
+        col.addWidget(self.title)
+        col.addWidget(meta)
+        col.addWidget(self.progress)
+        col.addLayout(bottom)
+
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(12, 12, 14, 12)
+        layout.setSpacing(14)
+        layout.addWidget(icon, 0, Qt.AlignTop)
+        layout.addLayout(col, 1)
 
     def _button(self, text: str, signal: Signal, danger: bool = False) -> QPushButton:
         btn = QPushButton(text)
@@ -269,8 +309,8 @@ class AnalyzingItem(QFrame):
         super().__init__(parent)
         self.setObjectName("ItemCard")
         icon = QLabel("🔍")
-        icon.setStyleSheet("font-size: 18pt;")
-        icon.setFixedWidth(42)
+        icon.setObjectName("ItemThumb")
+        icon.setFixedSize(128, 72)
         icon.setAlignment(Qt.AlignCenter)
         title = QLabel("Analizando enlace y calidades disponibles…")
         title.setStyleSheet("font-weight: 600;")

@@ -41,6 +41,18 @@ QMainWindow, QDialog {{ background: {BG}; }}
 QWidget#Central {{ background: {BG}; }}
 QToolTip {{ background: {SURFACE_2}; color: {TEXT}; border: 1px solid {BORDER}; padding: 6px; }}
 
+QFrame#Sidebar {{ background: {SURFACE}; border-right: 1px solid {BORDER}; }}
+QPushButton#NavButton {{
+    text-align: left; background: transparent; border: none; border-radius: 10px;
+    padding: 11px 14px; font-weight: 600; font-size: 10.5pt; color: {MUTED};
+}}
+QPushButton#NavButton:hover {{ background: {SURFACE_2}; color: {TEXT}; }}
+QPushButton#NavButton:checked {{ background: rgba(61,107,255,0.12); color: {ACCENT}; }}
+QLabel#SidebarNote {{ color: {MUTED}; font-size: 8.5pt; }}
+QLabel#PageTitle {{ font-size: 18pt; font-weight: 700; }}
+QLabel#ItemThumb {{
+    background: {SURFACE_2}; border: 1px solid {BORDER}; border-radius: 8px; font-size: 22pt;
+}}
 QLabel#BrandTitle {{ font-size: 20pt; font-weight: 700; }}
 QLabel#BrandTagline {{ color: {MUTED}; font-size: 9pt; }}
 QLabel#Muted, QLabel[muted="true"] {{ color: {MUTED}; }}
