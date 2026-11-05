@@ -99,3 +99,26 @@ def test_author_mode_requires_real_private_key(tmp_path, keypair):
     assert lm.is_author and lm.licensed and lm.remaining_today() is None
     (tmp_path / licensing.PRIVATE_KEY_FILENAME).write_text("basura")
     assert not LicenseManager(tmp_path).is_author
+
+
+def test_add_months_and_five_month_license(keypair):
+    from datetime import date
+    from descargo.core.licensing import add_months
+    assert add_months(date(2026, 1, 31), 1) == date(2026, 2, 28)
+    assert add_months(date(2026, 11, 5), 5) == date(2027, 4, 5)
+    exp = add_months(date.today(), 5).isoformat()
+    lic = verify_license(create_license(keypair, "Cinco meses", machine_code(), exp))
+    assert lic.expires == exp and not lic.expired
+
+
+def test_install_author_key_and_issued_log(tmp_path, keypair):
+    lm = LicenseManager(tmp_path)
+    fake = tmp_path / "falsa.key"
+    fake.write_text(ECC.generate(curve="ed25519").export_key(format="PEM"))
+    assert not lm.install_author_key(fake) and not lm.is_author
+    real = tmp_path / "real.key"
+    real.write_text(keypair)
+    assert lm.install_author_key(real) and lm.is_author
+    lm.log_issued("Ana", "AAAA-BBBB-CCCC-DDDD", "2027-04-05", "DGO1-x")
+    lm.log_issued("Beto", "1111-2222-3333-4444", None, "DGO1-y")
+    assert [i["nombre"] for i in lm.issued()] == ["Beto", "Ana"]

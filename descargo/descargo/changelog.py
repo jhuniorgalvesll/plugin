@@ -1,6 +1,14 @@
 """Novedades de cada versión (se muestran en la app y en GitHub Releases)."""
 
 CHANGELOG: list[tuple[str, list[str]]] = [
+    ("1.3.2", [
+        "👑 Activa el modo autor desde la app: en «Licencia» toca «Soy el autor: cargar mi llave» "
+        "y elige tu archivo. Aparece al instante el menú «Generar licencias».",
+        "🛠 Generador mejorado: licencias de 1 a 12 meses (por ejemplo 5 meses), 2 años, "
+        "permanentes o hasta una fecha que elijas, mostrando el día exacto en que vencen.",
+        "📋 Historial de licencias emitidas: cliente, código de equipo, vencimiento y botón "
+        "para volver a copiar cualquier licencia.",
+    ]),
     ("1.3.1", [
         "👑 Modo autor: el computador con la llave de licencias de lliuya.pe descarga sin "
         "límites y ve el generador de licencias. Los demás usuarios tienen el plan gratuito "

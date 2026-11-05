@@ -241,3 +241,45 @@ class LicenseManager:
     def private_key(self) -> str | None:
         path = self.folder / PRIVATE_KEY_FILENAME
         return path.read_text(encoding="utf-8") if path.is_file() else None
+
+    def install_author_key(self, source: Path | str) -> bool:
+        """Copia la llave del autor a la carpeta de datos, solo si es la llave REAL."""
+        try:
+            pem = Path(source).read_text(encoding="utf-8")
+            from Cryptodome.PublicKey import ECC
+            if ECC.import_key(pem).public_key() != ECC.import_key(PUBLIC_KEY_PEM):
+                return False
+        except (OSError, ValueError, TypeError, IndexError, UnicodeDecodeError):
+            return False
+        (self.folder / PRIVATE_KEY_FILENAME).write_text(pem, encoding="utf-8")
+        self._author = None
+        return self.is_author
+
+    # -- registro de licencias emitidas (solo autor) ------------------------------
+    def log_issued(self, name: str, machine: str, expires: str | None, key: str) -> None:
+        entry = {"fecha": datetime.now().isoformat(timespec="seconds"), "nombre": name,
+                 "equipo": machine, "vence": expires, "licencia": key}
+        with open(self.folder / "licencias_emitidas.jsonl", "a", encoding="utf-8") as fh:
+            fh.write(json.dumps(entry, ensure_ascii=False) + "\n")
+
+    def issued(self) -> list[dict]:
+        path = self.folder / "licencias_emitidas.jsonl"
+        if not path.is_file():
+            return []
+        items = []
+        for line in path.read_text(encoding="utf-8").splitlines():
+            try:
+                items.append(json.loads(line))
+            except ValueError:
+                continue
+        return list(reversed(items))
+
+
+def add_months(start: date, months: int) -> date:
+    """Suma meses de calendario (31-ene + 1 mes = 28/29-feb)."""
+    import calendar
+    month = start.month - 1 + months
+    year = start.year + month // 12
+    month = month % 12 + 1
+    day = min(start.day, calendar.monthrange(year, month)[1])
+    return date(year, month, day)

@@ -95,16 +95,14 @@ class MainWindow(QMainWindow):
         self.app_update: updater.AppUpdate | None = None
         self._tasks: list[TaskWorker] = []
         self._setup_tray()
+        self._update_plan()  # muestra/oculta el menú del autor desde el inicio
         QTimer.singleShot(2500, self._startup_checks)
         # Precarga el motor en segundo plano: el primer análisis empieza sin esperas.
         QTimer.singleShot(300, lambda: self._run_task(TaskWorker(_warm_up_engine)))
 
         QGuiApplication.clipboard().dataChanged.connect(self._clipboard_changed)
         QShortcut(QKeySequence.Paste, self, activated=self._paste_shortcut)
-        private_key = self.licenses.private_key() if self.licenses.is_author else None
-        if private_key:  # solo en el computador del autor
-            QShortcut(QKeySequence("Ctrl+Shift+L"), self,
-                      activated=lambda: LicenseGeneratorDialog(private_key, self).exec())
+        QShortcut(QKeySequence("Ctrl+Shift+L"), self, activated=self.open_generator)
 
     # -- construcción ----------------------------------------------------------
     def _sidebar(self) -> QFrame:
@@ -142,16 +140,13 @@ class MainWindow(QMainWindow):
         nav_about.clicked.connect(lambda: AboutDialog(self).exec())
         self.nav_license = self._nav_button("🔑   Licencia")
         self.nav_license.clicked.connect(lambda: self.open_license())
-        nav_gen = None
-        private_key = self.licenses.private_key() if self.licenses.is_author else None
-        if private_key:  # solo en el computador del autor (tiene la llave privada real)
-            nav_gen = self._nav_button("🛠   Generar licencias")
-            nav_gen.clicked.connect(lambda: LicenseGeneratorDialog(private_key, self).exec())
+        # Menú del autor: visible solo si este computador tiene la llave real.
+        self.nav_gen = self._nav_button("🛠   Generar licencias")
+        self.nav_gen.clicked.connect(self.open_generator)
         for b in (self.nav_downloads, self.nav_history, nav_settings, self.nav_updates,
                   self.nav_license, nav_about):
             lay.addWidget(b)
-        if nav_gen:
-            lay.addWidget(nav_gen)
+        lay.addWidget(self.nav_gen)
         lay.addStretch(1)
 
         self.plan_label = QLabel("")
@@ -749,6 +744,7 @@ class MainWindow(QMainWindow):
 
     def _update_plan(self) -> None:
         lm = self.licenses
+        self.nav_gen.setVisible(lm.is_author)
         if lm.is_author:
             self.plan_label.setText("👑 Autor · descargas ilimitadas")
             self.nav_license.setText("🔑   Licencia")
@@ -759,6 +755,10 @@ class MainWindow(QMainWindow):
             left = lm.remaining_today()
             self.plan_label.setText(f"Plan gratuito · {left}/{FREE_DAILY_LIMIT} hoy\nToca para obtener licencia")
             self.nav_license.setText("🔑   Obtener licencia")
+
+    def open_generator(self) -> None:
+        if self.licenses.is_author:
+            LicenseGeneratorDialog(self.licenses, self).exec()
 
     def open_license(self, limit_reached: bool = False) -> None:
         LicenseDialog(self.licenses, self, limit_reached=limit_reached).exec()

@@ -2,16 +2,18 @@
 
 from __future__ import annotations
 
-from datetime import date, timedelta
+from datetime import date
 
-from PySide6.QtCore import Qt, QTimer, QUrl
+from PySide6.QtCore import QDate, Qt, QTimer, QUrl
 from PySide6.QtGui import QDesktopServices, QGuiApplication
-from PySide6.QtWidgets import (QComboBox, QDialog, QFrame, QHBoxLayout, QLabel, QLineEdit,
-                               QMessageBox, QPlainTextEdit, QPushButton, QVBoxLayout, QWidget)
+from PySide6.QtWidgets import (QAbstractItemView, QComboBox, QDateEdit, QDialog, QFileDialog,
+                               QFormLayout, QFrame, QHBoxLayout, QHeaderView, QLabel, QLineEdit,
+                               QMessageBox, QPlainTextEdit, QPushButton, QTableWidget,
+                               QTableWidgetItem, QTabWidget, QVBoxLayout, QWidget)
 
 from .. import APP_NAME, AUTHOR_HANDLE, AUTHOR_INSTAGRAM, YAPE_NUMBER_DISPLAY
-from ..core.licensing import (FREE_DAILY_LIMIT, LicenseError, LicenseManager, create_license,
-                              machine_code)
+from ..core.licensing import (FREE_DAILY_LIMIT, LicenseError, LicenseManager, add_months,
+                              create_license, machine_code)
 
 
 def _label(text: str, muted: bool = False) -> QLabel:
@@ -84,6 +86,11 @@ class LicenseDialog(QDialog):
         self.key_input.setFixedHeight(80)
         root.addWidget(self.key_input)
 
+        self.btn_author = QPushButton("👑  Soy el autor: cargar mi llave de licencias…")
+        self.btn_author.setObjectName("Ghost")
+        self.btn_author.clicked.connect(self._load_author_key)
+        root.addWidget(self.btn_author, 0, Qt.AlignLeft)
+
         buttons = QHBoxLayout()
         insta = QPushButton(f"📷  Escribir a {AUTHOR_HANDLE}")
         insta.clicked.connect(lambda: QDesktopServices.openUrl(QUrl(AUTHOR_INSTAGRAM)))
@@ -108,7 +115,7 @@ class LicenseDialog(QDialog):
         if m.is_author:
             self.status.setText("👑 <b>Modo autor</b> — este computador tiene tu llave de licencias.<br>"
                                 "Descargas ilimitadas y acceso al generador de licencias.")
-            for w in (self.key_input, self.how, self.btn_activate, self.btn_remove):
+            for w in (self.key_input, self.how, self.btn_activate, self.btn_remove, self.btn_author):
                 w.hide()
             return
         if m.licensed:
@@ -125,6 +132,20 @@ class LicenseDialog(QDialog):
             self.how.show()
             self.btn_activate.show()
             self.btn_remove.hide()
+
+    def _load_author_key(self) -> None:
+        path, _ = QFileDialog.getOpenFileName(self, "Selecciona tu llave de licencias", "",
+                                              "Llave de licencias (*.key);;Todos los archivos (*)")
+        if not path:
+            return
+        if self.manager.install_author_key(path):
+            QMessageBox.information(self, "Modo autor activado",
+                                    "👑 ¡Listo! Este computador ahora es el del autor:\n"
+                                    "descargas ilimitadas y menú «Generar licencias» en la barra lateral.")
+            self._refresh()
+        else:
+            QMessageBox.warning(self, "Llave no válida",
+                                "Ese archivo no es la llave de licencias de DescarGO.")
 
     def _copy_code(self) -> None:
         QGuiApplication.clipboard().setText(machine_code())
@@ -149,61 +170,157 @@ class LicenseDialog(QDialog):
 
 
 class LicenseGeneratorDialog(QDialog):
-    """Solo aparece si la llave privada del autor está en la carpeta de datos."""
+    """Menú del autor: crear licencias y ver las emitidas. Solo con la llave real."""
 
-    DURATIONS = [("Permanente", None), ("1 mes", 31), ("3 meses", 92), ("6 meses", 183), ("1 año", 366)]
-
-    def __init__(self, private_key: str, parent: QWidget | None = None):
+    def __init__(self, manager: LicenseManager, parent: QWidget | None = None):
         super().__init__(parent)
-        self.private_key = private_key
-        self.setWindowTitle("Generador de licencias — solo autor")
-        self.setFixedWidth(560)
+        self.manager = manager
+        self.private_key = manager.private_key() or ""
+        self.setWindowTitle("Generador de licencias — Autor")
+        self.setMinimumWidth(640)
         root = QVBoxLayout(self)
         root.setContentsMargins(24, 22, 24, 20)
-        root.setSpacing(10)
+        root.setSpacing(12)
         title = QLabel("🛠  Generador de licencias")
         title.setObjectName("DialogTitle")
         root.addWidget(title)
-        root.addWidget(_label("Solo visible en tu computador porque tiene tu llave privada. "
-                              "Nunca compartas ese archivo.", muted=True))
-        root.addWidget(QLabel("Nombre del cliente"))
+        root.addWidget(_label("👑 Modo autor: solo tu computador ve este menú porque tiene tu llave real.",
+                              muted=True))
+        tabs = QTabWidget()
+        tabs.addTab(self._new_tab(), "➕  Nueva licencia")
+        tabs.addTab(self._history_tab(), "📋  Licencias emitidas")
+        tabs.currentChanged.connect(lambda i: i == 1 and self._load_history())
+        root.addWidget(tabs, 1)
+        close = QPushButton("Cerrar")
+        close.clicked.connect(self.accept)
+        row = QHBoxLayout()
+        row.addStretch(1)
+        row.addWidget(close)
+        root.addLayout(row)
+
+    # -- nueva licencia ----------------------------------------------------------
+    def _new_tab(self) -> QWidget:
+        page = QWidget()
+        form = QFormLayout(page)
+        form.setContentsMargins(6, 16, 6, 6)
+        form.setVerticalSpacing(10)
         self.name = QLineEdit()
         self.name.setPlaceholderText("Ej.: María Quispe")
-        root.addWidget(self.name)
-        root.addWidget(QLabel("Código de equipo del cliente"))
+        form.addRow("Nombre del cliente", self.name)
         self.machine = QLineEdit()
-        self.machine.setPlaceholderText("Ej.: 7F3A-91C2-0BDE-44A8")
-        root.addWidget(self.machine)
-        root.addWidget(QLabel("Duración"))
+        self.machine.setPlaceholderText("Ej.: D5FF-BDC4-9F8A-8595")
+        form.addRow("Código de equipo", self.machine)
+
         self.duration = QComboBox()
-        for text, days in self.DURATIONS:
-            self.duration.addItem(text, days)
-        root.addWidget(self.duration)
+        self.duration.addItem("Permanente (no vence)", ("perm", 0))
+        for m in range(1, 13):
+            self.duration.addItem(f"{m} mes" + ("es" if m > 1 else ""), ("months", m))
+        self.duration.addItem("2 años", ("months", 24))
+        self.duration.addItem("Fecha personalizada…", ("date", 0))
+        self.duration.setCurrentIndex(5)  # 5 meses
+        form.addRow("Duración", self.duration)
+        self.custom_date = QDateEdit(QDate.currentDate().addMonths(5))
+        self.custom_date.setCalendarPopup(True)
+        self.custom_date.setDisplayFormat("dd/MM/yyyy")
+        self.custom_date.setMinimumDate(QDate.currentDate().addDays(1))
+        form.addRow("Vence el", self.custom_date)
+        self.expiry_label = _label("", muted=True)
+        form.addRow("", self.expiry_label)
+
         self.output = QPlainTextEdit()
         self.output.setReadOnly(True)
         self.output.setFixedHeight(90)
         self.output.setPlaceholderText("Aquí aparecerá la licencia para enviar al cliente.")
-        root.addWidget(self.output)
+        form.addRow("Licencia", self.output)
         row = QHBoxLayout()
         row.addStretch(1)
         self.btn_copy = QPushButton("📋 Copiar licencia")
-        self.btn_copy.clicked.connect(lambda: QGuiApplication.clipboard().setText(self.output.toPlainText()))
-        gen = QPushButton("Generar")
+        self.btn_copy.setEnabled(False)
+        self.btn_copy.clicked.connect(self._copy)
+        gen = QPushButton("Generar licencia")
         gen.setObjectName("Primary")
         gen.clicked.connect(self._generate)
-        close = QPushButton("Cerrar")
-        close.clicked.connect(self.accept)
-        row.addWidget(close)
         row.addWidget(self.btn_copy)
         row.addWidget(gen)
-        root.addLayout(row)
+        form.addRow("", row)
+
+        self.duration.currentIndexChanged.connect(self._update_expiry)
+        self.custom_date.dateChanged.connect(self._update_expiry)
+        self._update_expiry()
+        return page
+
+    def _expiry(self) -> date | None:
+        kind, months = self.duration.currentData()
+        if kind == "perm":
+            return None
+        if kind == "months":
+            return add_months(date.today(), months)
+        return self.custom_date.date().toPython()
+
+    def _update_expiry(self) -> None:
+        kind, _ = self.duration.currentData()
+        self.custom_date.setEnabled(kind == "date")
+        exp = self._expiry()
+        self.expiry_label.setText("Sin vencimiento." if exp is None
+                                  else f"La licencia vencerá el <b>{exp.strftime('%d/%m/%Y')}</b>.")
 
     def _generate(self) -> None:
-        days = self.duration.currentData()
-        expires = (date.today() + timedelta(days=days)).isoformat() if days else None
+        exp = self._expiry()
+        expires = exp.isoformat() if exp else None
+        name = self.name.text().strip() or "Usuario"
         try:
-            key = create_license(self.private_key, self.name.text(), self.machine.text(), expires)
+            key = create_license(self.private_key, name, self.machine.text(), expires)
         except Exception as exc:
             QMessageBox.warning(self, "No se pudo generar", str(exc))
             return
         self.output.setPlainText(key)
+        self.btn_copy.setEnabled(True)
+        self.manager.log_issued(name, self.machine.text().strip().upper(), expires, key)
+
+    def _copy(self) -> None:
+        QGuiApplication.clipboard().setText(self.output.toPlainText())
+        self.btn_copy.setText("✔ Copiada")
+        QTimer.singleShot(2000, lambda: self.btn_copy.setText("📋 Copiar licencia"))
+
+    # -- historial ---------------------------------------------------------------
+    def _history_tab(self) -> QWidget:
+        page = QWidget()
+        lay = QVBoxLayout(page)
+        lay.setContentsMargins(0, 12, 0, 0)
+        self.table = QTableWidget(0, 4)
+        self.table.setHorizontalHeaderLabels(["Fecha", "Cliente", "Código de equipo", "Vence"])
+        self.table.verticalHeader().hide()
+        self.table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self.table.setSelectionBehavior(QAbstractItemView.SelectRows)
+        self.table.setAlternatingRowColors(True)
+        header = self.table.horizontalHeader()
+        header.setSectionResizeMode(QHeaderView.ResizeToContents)
+        header.setSectionResizeMode(1, QHeaderView.Stretch)
+        lay.addWidget(self.table, 1)
+        row = QHBoxLayout()
+        row.addWidget(_label("Selecciona una fila para copiar de nuevo su licencia.", muted=True), 1)
+        again = QPushButton("📋 Copiar licencia seleccionada")
+        again.clicked.connect(self._copy_selected)
+        row.addWidget(again)
+        lay.addLayout(row)
+        return page
+
+    def _load_history(self) -> None:
+        items = self.manager.issued()
+        self.table.setRowCount(len(items))
+        today = date.today().isoformat()
+        for r, it in enumerate(items):
+            vence = it.get("vence")
+            status = "Permanente" if not vence else (f"{vence} (vencida)" if vence < today else vence)
+            for c, value in enumerate([str(it.get("fecha", ""))[:16].replace("T", " "),
+                                       it.get("nombre", ""), it.get("equipo", ""), status]):
+                cell = QTableWidgetItem(value)
+                cell.setData(Qt.UserRole, it.get("licencia", ""))
+                self.table.setItem(r, c, cell)
+
+    def _copy_selected(self) -> None:
+        row = self.table.currentRow()
+        if row < 0:
+            return
+        QGuiApplication.clipboard().setText(self.table.item(row, 0).data(Qt.UserRole))
+        QMessageBox.information(self, "Copiada", "La licencia se copió al portapapeles.")
