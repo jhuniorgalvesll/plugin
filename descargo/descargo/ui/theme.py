@@ -49,6 +49,11 @@ QPushButton#NavButton {{
 QPushButton#NavButton:hover {{ background: {SURFACE_2}; color: {TEXT}; }}
 QPushButton#NavButton:checked {{ background: rgba(61,107,255,0.12); color: {ACCENT}; }}
 QLabel#SidebarNote {{ color: {MUTED}; font-size: 8.5pt; }}
+QPushButton#AuthorLink {{
+    background: transparent; border: 1px solid {BORDER}; border-radius: 10px; padding: 7px 12px;
+    color: {TEXT}; font-weight: 600;
+}}
+QPushButton#AuthorLink:hover {{ border-color: #D62976; color: #D62976; }}
 QLabel#PageTitle {{ font-size: 18pt; font-weight: 700; }}
 QLabel#ItemThumb {{
     background: {SURFACE_2}; border: 1px solid {BORDER}; border-radius: 8px; font-size: 22pt;

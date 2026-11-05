@@ -40,6 +40,7 @@ class OptionsDialog(QDialog):
         self.info = info
         self.settings = settings
         self.requests: list[DownloadRequest] = []
+        self.want_playlist = False
         self.setWindowTitle("Opciones de descarga — DescarGO")
         self.setMinimumWidth(640)
         self.resize(700, 860 if not info.is_playlist else 900)
@@ -68,6 +69,19 @@ class OptionsDialog(QDialog):
         self.stack.addWidget(self._video_page(last))
         self.stack.addWidget(self._audio_page(last))
         root.addWidget(self.stack, 1)
+
+        if info.playlist_url:
+            notice = QFrame()
+            notice.setObjectName("NoticeCard")
+            n_row = QHBoxLayout(notice)
+            n_row.setContentsMargins(14, 8, 8, 8)
+            n_text = QLabel("📃  Este video es parte de una lista de reproducción.")
+            n_row.addWidget(n_text, 1)
+            n_btn = QPushButton("Descargar la lista completa…")
+            n_btn.setObjectName("Small")
+            n_btn.clicked.connect(self._choose_playlist)
+            n_row.addWidget(n_btn)
+            root.addWidget(notice)
 
         if info.is_playlist:
             root.addWidget(self._playlist_box())
@@ -312,6 +326,10 @@ class OptionsDialog(QDialog):
         all_btn.clicked.connect(lambda: self._check_all(True))
         none_btn.clicked.connect(lambda: self._check_all(False))
         return box
+
+    def _choose_playlist(self) -> None:
+        self.want_playlist = True
+        self.reject()
 
     def _check_all(self, checked: bool) -> None:
         for i in range(self.entries_list.count()):

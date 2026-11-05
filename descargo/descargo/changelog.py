@@ -1,6 +1,17 @@
 """Novedades de cada versión (se muestran en la app y en GitHub Releases)."""
 
 CHANGELOG: list[tuple[str, list[str]]] = [
+    ("1.2.0", [
+        "⚡ Análisis mucho más rápido: los enlaces de YouTube con «&list=…» (por ejemplo, las "
+        "listas Mix) ahora analizan solo el video. Si quieres la lista completa, hay un botón "
+        "«Descargar la lista completa».",
+        "🖼️ La portada del video aparece al instante mientras se analiza (YouTube) o en un "
+        "segundo (TikTok, Vimeo, Dailymotion, SoundCloud).",
+        "🚀 La descarga empieza de inmediato: se reutiliza el análisis en lugar de repetirlo, "
+        "y el motor se precarga al abrir la app.",
+        "📷 Página del autor: sigue a @lliuya.pe en Instagram desde la barra lateral, "
+        "«Acerca de» e «Invítame un café».",
+    ]),
     ("1.1.0", [
         "🔄 Centro de actualizaciones: el motor de descarga se actualiza solo, una vez al día, "
         "desde su sitio oficial y con verificación SHA-256. Así las descargas siguen funcionando "

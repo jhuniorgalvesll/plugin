@@ -2,6 +2,10 @@
 
 from __future__ import annotations
 
+import json
+import re
+import urllib.parse
+import urllib.request
 from typing import Any
 
 from . import policy
@@ -131,13 +135,71 @@ def _subtitle_languages(info: dict) -> list[str]:
     return langs
 
 
-def _ydl_params(cookies_browser: str = "") -> dict[str, Any]:
+_YT_ID = re.compile(
+    r"(?:youtube\.com/(?:watch\?(?:.*&)?v=|shorts/|embed/|live/|v/)|youtu\.be/)([A-Za-z0-9_-]{11})")
+
+
+def youtube_id(url: str) -> str | None:
+    m = _YT_ID.search(url or "")
+    return m.group(1) if m else None
+
+
+def quick_thumbnail(url: str) -> str:
+    """Portada instantánea, sin analizar (YouTube la publica con el ID del video)."""
+    vid = youtube_id(url)
+    return f"https://i.ytimg.com/vi/{vid}/hqdefault.jpg" if vid else ""
+
+
+_OEMBED = {
+    "tiktok.com": "https://www.tiktok.com/oembed?url={}",
+    "vimeo.com": "https://vimeo.com/api/oembed.json?url={}",
+    "dailymotion.com": "https://www.dailymotion.com/services/oembed?url={}",
+    "soundcloud.com": "https://soundcloud.com/oembed?format=json&url={}",
+}
+
+
+def oembed_preview(url: str, timeout: int = 8) -> tuple[str, str]:
+    """(portada, título) en ~1 s para plataformas con oEmbed público. Vacío si no hay."""
+    host = (urllib.parse.urlparse(url).hostname or "").lower()
+    endpoint = next((e for d, e in _OEMBED.items() if host == d or host.endswith("." + d)), None)
+    if not endpoint:
+        return "", ""
+    req = urllib.request.Request(endpoint.format(urllib.parse.quote(url, safe="")),
+                                 headers={"User-Agent": "Mozilla/5.0 DescarGO"})
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+    except Exception:
+        return "", ""
+    return str(data.get("thumbnail_url") or ""), str(data.get("title") or "")
+
+
+def split_watch_playlist(url: str) -> tuple[str, str]:
+    """Separa «video + lista» de YouTube: (enlace solo del video, enlace de la lista).
+
+    Las listas «Mix» (RD…) son infinitas y generadas por YouTube: no se ofrecen.
+    """
+    vid = youtube_id(url)
+    if not vid:
+        return url, ""
+    query = urllib.parse.parse_qs(urllib.parse.urlparse(url).query)
+    playlist = (query.get("list") or [""])[0]
+    if not playlist:
+        return url, ""
+    video_url = f"https://www.youtube.com/watch?v={vid}"
+    if playlist.startswith("RD"):
+        return video_url, ""
+    return video_url, f"https://www.youtube.com/playlist?list={playlist}"
+
+
+def _ydl_params(cookies_browser: str = "", single: bool = True) -> dict[str, Any]:
     params: dict[str, Any] = {
         "quiet": True,
         "no_warnings": True,
         "skip_download": True,
         "extract_flat": "in_playlist",
-        "noplaylist": False,
+        "noplaylist": single,
+        "socket_timeout": 20,
         "logger": QuietLogger(),
     }
     if cookies_browser:
@@ -194,13 +256,20 @@ def _thumbnail(info: dict) -> str:
     return thumbs[-1].get("url", "") if thumbs else ""
 
 
-def analyze(url: str, *, cookies_browser: str = "") -> MediaInfo:
-    """Analiza un enlace en red. Lanza BlockedContentError o AnalysisError."""
+def analyze(url: str, *, cookies_browser: str = "", full_playlist: bool = False) -> MediaInfo:
+    """Analiza un enlace en red. Lanza BlockedContentError o AnalysisError.
+
+    Por defecto, un enlace «video + lista» analiza solo el video (rápido); la lista
+    completa se analiza únicamente si el usuario la pide (full_playlist=True).
+    """
     policy.check_url(url)
+    playlist_url = ""
+    if not full_playlist:
+        url, playlist_url = split_watch_playlist(url)
     import yt_dlp  # import diferido: acelera el arranque de la app
 
     try:
-        with yt_dlp.YoutubeDL(_ydl_params(cookies_browser)) as ydl:
+        with yt_dlp.YoutubeDL(_ydl_params(cookies_browser, single=not full_playlist)) as ydl:
             info = ydl.extract_info(url, download=False)
             info = ydl.sanitize_info(info)
     except policy.BlockedContentError:
@@ -212,4 +281,8 @@ def analyze(url: str, *, cookies_browser: str = "") -> MediaInfo:
         raise AnalysisError(friendly_error(str(exc))) from exc
     if not info:
         raise AnalysisError("No se encontró ningún video o audio en esta página.")
-    return info_to_media(url, info)
+    media = info_to_media(url, info)
+    media.playlist_url = playlist_url if not media.is_playlist else ""
+    if not media.is_playlist:
+        media.raw_info = info
+    return media

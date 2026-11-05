@@ -9,7 +9,7 @@ from PySide6.QtWidgets import (QApplication, QCheckBox, QComboBox, QDialog, QFil
                                QPushButton, QRadioButton, QSpinBox, QTabWidget, QVBoxLayout,
                                QWidget)
 
-from .. import (APP_NAME, APP_TAGLINE, APP_VERSION, COPYRIGHT_OWNER, COPYRIGHT_TEXT,
+from .. import (AUTHOR_HANDLE, AUTHOR_INSTAGRAM, APP_NAME, APP_TAGLINE, APP_VERSION, COPYRIGHT_OWNER, COPYRIGHT_TEXT,
                 COPYRIGHT_WEBSITE, YAPE_NUMBER, YAPE_NUMBER_DISPLAY)
 from ..config import COOKIE_BROWSERS, Settings
 from ..core.security import detect_antivirus
@@ -68,7 +68,8 @@ class CoffeeDialog(QDialog):
         steps = _wrap(
             "1. Abre tu app <b>Yape</b>.<br>"
             "2. Toca <b>Yapear</b> e ingresa el número de arriba.<br>"
-            "3. Elige el monto que quieras y confirma. ¡Gracias! 💜", muted=True)
+            "3. Elige el monto que quieras y confirma. ¡Gracias! 💜<br><br>"
+            f'Sígueme en Instagram: <a href="{AUTHOR_INSTAGRAM}">{AUTHOR_HANDLE}</a>', muted=True)
         root.addWidget(steps)
 
         row = QHBoxLayout()
@@ -124,7 +125,8 @@ class AboutDialog(QDialog):
         r_lay.setContentsMargins(16, 14, 16, 14)
         r_lay.addWidget(_wrap(f"<b>{COPYRIGHT_TEXT}</b>"))
         r_lay.addWidget(_wrap(
-            f'Desarrollado por <a href="{COPYRIGHT_WEBSITE}">{COPYRIGHT_OWNER}</a>. '
+            f'Desarrollado por <b>{COPYRIGHT_OWNER}</b> · Instagram '
+            f'<a href="{AUTHOR_INSTAGRAM}">{AUTHOR_HANDLE}</a>. '
             "Queda prohibida la reproducción, distribución o modificación de este software "
             "sin autorización del titular.", muted=True))
         root.addWidget(rights)
@@ -142,8 +144,9 @@ class AboutDialog(QDialog):
         coffee = QPushButton("☕  Invítame un café")
         coffee.setObjectName("Coffee")
         coffee.clicked.connect(lambda: CoffeeDialog(self).exec())
-        web = QPushButton("🌐  lliuya.pe")
-        web.clicked.connect(lambda: QDesktopServices.openUrl(QUrl(COPYRIGHT_WEBSITE)))
+        web = QPushButton(f"📷  {AUTHOR_HANDLE}")
+        web.setToolTip("Página del autor en Instagram")
+        web.clicked.connect(lambda: QDesktopServices.openUrl(QUrl(AUTHOR_INSTAGRAM)))
         close = QPushButton("Cerrar")
         close.clicked.connect(self.accept)
         row.addWidget(coffee)

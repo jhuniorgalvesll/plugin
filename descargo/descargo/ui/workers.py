@@ -14,16 +14,18 @@ class AnalyzeSignals(QObject):
 
 
 class AnalyzeWorker(QRunnable):
-    def __init__(self, token: str, url: str, cookies_browser: str = ""):
+    def __init__(self, token: str, url: str, cookies_browser: str = "", full_playlist: bool = False):
         super().__init__()
         self.token = token
         self.url = url
         self.cookies_browser = cookies_browser
+        self.full_playlist = full_playlist
         self.signals = AnalyzeSignals()
 
     def run(self) -> None:
         try:
-            info = analyzer.analyze(self.url, cookies_browser=self.cookies_browser)
+            info = analyzer.analyze(self.url, cookies_browser=self.cookies_browser,
+                                    full_playlist=self.full_playlist)
         except policy.BlockedContentError as exc:
             self.signals.failed.emit(self.token, str(exc), True)
         except analyzer.AnalysisError as exc:

@@ -14,9 +14,10 @@ from PySide6.QtWidgets import (QAbstractItemView, QButtonGroup, QFrame, QMenu, Q
                                QStackedWidget, QTableWidget, QTableWidgetItem, QVBoxLayout,
                                QWidget)
 
-from .. import APP_NAME, APP_TAGLINE, APP_VERSION, COPYRIGHT_YEAR
+from .. import (APP_NAME, APP_TAGLINE, APP_VERSION, AUTHOR_HANDLE, AUTHOR_INSTAGRAM,
+                COPYRIGHT_YEAR)
 from ..config import Settings
-from ..core import policy, updater
+from ..core import analyzer, policy, updater
 from ..core.downloader import (STATUS_CANCELLED, STATUS_DONE, STATUS_PAUSED, STATUS_THREAT, DownloadJob,
                                JobResult, JobSettings, release_from_quarantine)
 from ..core.library import Library
@@ -28,6 +29,12 @@ from .options_dialog import OptionsDialog
 from .updates_dialog import UpdatesDialog, check_and_install_engine
 from .widgets import AnalyzingItem, DownloadItem, app_icon, brand_label, logo_pixmap
 from .workers import AnalyzeWorker, DownloadWorker, TaskWorker
+
+def _warm_up_engine() -> None:
+    import yt_dlp  # noqa: F401  (carga los extractores una sola vez)
+    from yt_dlp.extractor import gen_extractor_classes
+    gen_extractor_classes()
+
 
 _STATUS_TEXT = {
     "done": "Completado", "suspicious": "En cuarentena", "threat": "Amenaza",
@@ -86,6 +93,8 @@ class MainWindow(QMainWindow):
         self._tasks: list[TaskWorker] = []
         self._setup_tray()
         QTimer.singleShot(2500, self._startup_checks)
+        # Precarga el motor en segundo plano: el primer análisis empieza sin esperas.
+        QTimer.singleShot(300, lambda: self._run_task(TaskWorker(_warm_up_engine)))
 
         QGuiApplication.clipboard().dataChanged.connect(self._clipboard_changed)
         QShortcut(QKeySequence.Paste, self, activated=self._paste_shortcut)
@@ -139,6 +148,12 @@ class MainWindow(QMainWindow):
         coffee.clicked.connect(lambda: CoffeeDialog(self).exec())
         lay.addWidget(coffee)
         lay.addSpacing(8)
+        author = QPushButton(f"📷  {AUTHOR_HANDLE}")
+        author.setObjectName("AuthorLink")
+        author.setCursor(Qt.PointingHandCursor)
+        author.setToolTip("Página del autor en Instagram")
+        author.clicked.connect(lambda: QDesktopServices.openUrl(QUrl(AUTHOR_INSTAGRAM)))
+        lay.addWidget(author)
         rights = QLabel(f"© {COPYRIGHT_YEAR} lliuya.pe\nTodos los derechos reservados")
         rights.setObjectName("SidebarNote")
         rights.setAlignment(Qt.AlignCenter)
@@ -324,14 +339,22 @@ class MainWindow(QMainWindow):
             self.url_input.setText(" ".join(urls))
             self.statusBar().showMessage("🔗 Enlace detectado en el portapapeles. Presiona «Descargar».", 6000)
 
-    def analyze_url(self, url: str) -> None:
+    def analyze_url(self, url: str, full_playlist: bool = False) -> None:
         if policy.is_paid_url(url):
             self._warn_blocked(policy.PAID_MESSAGE)
             return
         token = uuid.uuid4().hex
         card = AnalyzingItem(url)
         self._insert_card(card)
-        worker = AnalyzeWorker(token, url, self.settings.cookies_browser)
+        # Portada al instante (YouTube) o en ~1 s (TikTok, Vimeo…), sin esperar el análisis.
+        thumb = analyzer.quick_thumbnail(url)
+        if thumb:
+            card.set_preview(thumb)
+        else:
+            preview = self._run_task(TaskWorker(analyzer.oembed_preview, url))
+            preview.signals.finished.connect(
+                lambda res, c=card: c.set_preview(*res) if res and c.parent() else None)
+        worker = AnalyzeWorker(token, url, self.settings.cookies_browser, full_playlist)
         worker.setAutoDelete(False)
         worker.signals.finished.connect(self._analysis_done)
         worker.signals.failed.connect(self._analysis_failed)
@@ -368,10 +391,18 @@ class MainWindow(QMainWindow):
                 dest_dir=self.settings.download_dir, thumbnail=info.thumbnail)
             if req.kind == "video":
                 req.subtitles = [s for s in req.subtitles if s in info.subtitles]
+            req.prefetched_info = info.raw_info
             self.enqueue([req])
             return
         dialog = OptionsDialog(info, self.settings, self)
-        if dialog.exec():
+        accepted = dialog.exec()
+        if dialog.want_playlist and info.playlist_url:
+            self.analyze_url(info.playlist_url, full_playlist=True)
+            return
+        if accepted:
+            if not info.is_playlist:
+                for req in dialog.requests:
+                    req.prefetched_info = info.raw_info
             self.enqueue(dialog.requests, batch=info.is_playlist)
 
     # -- cola de descargas -------------------------------------------------------

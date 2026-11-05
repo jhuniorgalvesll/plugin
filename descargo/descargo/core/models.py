@@ -84,6 +84,10 @@ class MediaInfo:
     subtitles: list[str] = field(default_factory=list)
     is_playlist: bool = False
     entries: list[PlaylistEntry] = field(default_factory=list)
+    # El video pertenece a una lista: se ofrece descargarla completa (opcional).
+    playlist_url: str = ""
+    # Datos ya analizados: la descarga empieza sin volver a consultar la plataforma.
+    raw_info: dict | None = field(default=None, repr=False)
 
 
 @dataclass
@@ -103,6 +107,7 @@ class DownloadRequest:
     dest_dir: str = ""
     thumbnail: str = ""
     job_id: str = field(default_factory=lambda: uuid.uuid4().hex[:12])
+    prefetched_info: dict | None = field(default=None, repr=False, compare=False)
 
     @property
     def quality_label(self) -> str:

@@ -6,12 +6,14 @@
 from datetime import date
 
 APP_NAME = "DescarGO"
-APP_VERSION = "1.1.0"
+APP_VERSION = "1.2.0"
 APP_TAGLINE = "Descarga y listo"
 APP_ID = "pe.lliuya.descargo"
 
 COPYRIGHT_OWNER = "lliuya.pe"
 COPYRIGHT_WEBSITE = "https://lliuya.pe"
+AUTHOR_INSTAGRAM = "https://www.instagram.com/lliuya.pe/"
+AUTHOR_HANDLE = "@lliuya.pe"
 COPYRIGHT_YEAR = max(2026, date.today().year)
 COPYRIGHT_TEXT = f"© {COPYRIGHT_YEAR} {COPYRIGHT_OWNER} — Todos los derechos reservados"
 

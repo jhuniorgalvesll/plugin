@@ -5,6 +5,7 @@ No depende de Qt; la interfaz lo usa a través de callbacks.
 
 from __future__ import annotations
 
+import copy
 import shutil
 import threading
 import time
@@ -143,9 +144,10 @@ class DownloadJob:
         import yt_dlp
 
         cover = self.settings.embed_thumbnail
+        prefetched = self.request.prefetched_info
         while True:
             try:
-                self._download(cover)
+                self._download(cover, prefetched)
             except policy.BlockedContentError as exc:
                 self.cleanup()
                 return JobResult(STATUS_BLOCKED, message=str(exc))
@@ -154,6 +156,13 @@ class DownloadJob:
             except Exception as exc:
                 if self.stop_requested:
                     return self._stopped()
+                if prefetched is not None:
+                    # los datos del análisis pudieron caducar: se consultan de nuevo
+                    prefetched = None
+                    self.request.prefetched_info = None
+                    self.cleanup()
+                    self.workdir.mkdir(parents=True, exist_ok=True)
+                    continue
                 if cover:
                     # la portada nunca debe arruinar una descarga: se repite una vez sin ella
                     # (formato sin soporte de carátula, miniatura rota o inaccesible…)
@@ -168,7 +177,7 @@ class DownloadJob:
             return self._stopped()
         return self._scan_and_deliver()
 
-    def _download(self, cover: bool) -> None:
+    def _download(self, cover: bool, prefetched: dict | None = None) -> None:
         import yt_dlp
         opts = build_ydl_options(
             self.request, str(self.workdir),
@@ -180,7 +189,10 @@ class DownloadJob:
             postprocessor_hook=self._pp_hook,
         )
         with yt_dlp.YoutubeDL(opts) as ydl:
-            info = ydl.extract_info(self.request.url, download=False)
+            if prefetched is not None:
+                info = copy.deepcopy(prefetched)  # sin repetir el análisis: más rápido
+            else:
+                info = ydl.extract_info(self.request.url, download=False)
             policy.check_info(ydl.sanitize_info(info) or {})
             if self.stop_requested:
                 raise yt_dlp.utils.DownloadCancelled("detenido")

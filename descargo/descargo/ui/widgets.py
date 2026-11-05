@@ -312,8 +312,10 @@ class AnalyzingItem(QFrame):
         icon.setObjectName("ItemThumb")
         icon.setFixedSize(128, 72)
         icon.setAlignment(Qt.AlignCenter)
-        title = QLabel("Analizando enlace y calidades disponibles…")
+        self.thumb = icon
+        title = ElidedLabel("Analizando enlace y calidades disponibles…")
         title.setStyleSheet("font-weight: 600;")
+        self.title = title
         link = ElidedLabel(url)
         link.setProperty("muted", True)
         bar = QProgressBar()
@@ -324,6 +326,14 @@ class AnalyzingItem(QFrame):
         col.addWidget(link)
         col.addWidget(bar)
         row = QHBoxLayout(self)
-        row.setContentsMargins(14, 12, 14, 12)
+        row.setContentsMargins(12, 12, 14, 12)
+        row.setSpacing(14)
         row.addWidget(icon)
         row.addLayout(col, 1)
+
+    def set_preview(self, thumbnail: str, title: str = "") -> None:
+        """Muestra portada (y título) apenas se conocen, antes de terminar el análisis."""
+        if thumbnail:
+            load_thumbnail(thumbnail, self.thumb)
+        if title:
+            self.title.setFullText(f"{title} — analizando calidades…")
