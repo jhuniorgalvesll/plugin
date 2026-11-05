@@ -1,6 +1,13 @@
 """Novedades de cada versión (se muestran en la app y en GitHub Releases)."""
 
 CHANGELOG: list[tuple[str, list[str]]] = [
+    ("1.4.2", [
+        "🔧 Arreglado el error «Acceso denegado» al actualizar: ahora la actualización espera a "
+        "que DescarGO se cierre por completo antes de instalar.",
+        "🪄 Actualización invisible: sin asistente ni ventanas del instalador. DescarGO se cierra "
+        "unos segundos, se actualiza y se vuelve a abrir solo, mostrando esta pantalla.",
+        "📷 Sigue a @lliuya.pe en Instagram desde la pantalla de novedades.",
+    ]),
     ("1.4.1", [
         "⬆ Actualización en un clic: DescarGO revisa GitHub al abrirse y cada hora; cuando hay "
         "versión nueva aparece «Actualizar ahora». Se descarga, se verifica, se instala sola sin "

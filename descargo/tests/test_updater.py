@@ -137,3 +137,18 @@ def test_cover_postprocessor_is_last():
     assert "writethumbnail" not in build_ydl_options(audio, "/tmp/x")
     audio.audio_format = "mp3"
     assert build_ydl_options(audio, "/tmp/x", embed_thumbnail=False).get("writethumbnail") is None
+
+
+def test_update_script_waits_then_installs_silently():
+    import os
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+    from descargo.ui.updates_dialog import build_update_script
+    exe = r"C:\Users\USER\AppData\Local\Programs\DescarGO\DescarGO.exe"
+    inst = r"C:\Users\O'Brien\AppData\Roaming\DescarGO\actualizaciones\DescarGO-Setup-1.4.2.exe"
+    script = build_update_script(inst, exe, 4321, r"C:\Users\USER\AppData\Local")
+    lines = script.split("\r\n")
+    assert lines[1] == "Wait-Process -Id 4321 -Timeout 60"           # 1) espera a que la app cierre
+    assert "/VERYSILENT" in lines[3] and "/CURRENTUSER" in lines[3]    # 2) instala sin ventanas, por usuario
+    assert "-Wait" in lines[3] and "O''Brien" in lines[3]              #    (rutas con comillas escapadas)
+    assert lines[4].startswith("Start-Process -FilePath 'C:\\Users\\USER")  # 3) abre la nueva versión
+    assert "/ALLUSERS" in build_update_script(inst, r"C:\Program Files\DescarGO\DescarGO.exe", 1, r"C:\Users\USER\AppData\Local")

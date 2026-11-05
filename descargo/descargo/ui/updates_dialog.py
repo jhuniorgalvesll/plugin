@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import os
 import sys
+from pathlib import Path
 
 from PySide6.QtCore import QProcess, Qt, QThreadPool, QUrl
 from PySide6.QtGui import QDesktopServices
@@ -30,14 +32,51 @@ def restart_app() -> None:
     QApplication.quit()
 
 
-# Instalación silenciosa: sin asistente, cierra DescarGO, actualiza y lo vuelve a abrir.
-SILENT_INSTALL_ARGS = ["/SILENT", "/SP-", "/NOCANCEL", "/SUPPRESSMSGBOXES", "/CLOSEAPPLICATIONS"]
+# Instalación invisible: sin asistente ni ventanas.
+SILENT_INSTALL_ARGS = ["/VERYSILENT", "/SP-", "/NOCANCEL", "/SUPPRESSMSGBOXES", "/NORESTART",
+                       "/CLOSEAPPLICATIONS"]
+
+
+def _ps_quote(text: str) -> str:
+    return "'" + str(text).replace("'", "''") + "'"
+
+
+def build_update_script(installer: str, exe: str, pid: int, local_appdata: str = "") -> str:
+    """Script de PowerShell: esperar cierre → instalar sin ventanas → abrir la nueva versión."""
+    per_user = bool(local_appdata) and str(exe).lower().startswith(local_appdata.lower())
+    args = ",".join(_ps_quote(a) for a in SILENT_INSTALL_ARGS + ["/CURRENTUSER" if per_user else "/ALLUSERS"])
+    return "\r\n".join([
+        "$ErrorActionPreference = 'SilentlyContinue'",
+        f"Wait-Process -Id {int(pid)} -Timeout 60",
+        "Start-Sleep -Milliseconds 800",
+        f"Start-Process -FilePath {_ps_quote(installer)} -ArgumentList {args} -Wait",
+        f"Start-Process -FilePath {_ps_quote(exe)}",
+    ])
 
 
 def run_installer(path: str) -> None:
-    """Ejecuta el instalador verificado en modo silencioso y cierra la app para reemplazarla."""
-    if not QProcess.startDetached(path, SILENT_INSTALL_ARGS):
-        raise updater.UpdateError("No se pudo abrir el instalador.")
+    """Actualiza en segundo plano y vuelve a abrir DescarGO ya actualizado.
+
+    Un pequeño script (oculto) espera a que esta app termine de cerrarse —así el
+    instalador nunca encuentra DescarGO.exe en uso—, instala sin ventanas y abre la
+    nueva versión, que muestra «¡Actualizado!».
+    """
+    if not IS_WINDOWS or not getattr(sys, "frozen", False):
+        if not QProcess.startDetached(path, []):
+            raise updater.UpdateError("No se pudo abrir el instalador.")
+        _quit_all()
+        return
+    script = build_update_script(path, sys.executable, os.getpid(), os.environ.get("LOCALAPPDATA", ""))
+    script_path = Path(path).with_name("actualizar.ps1")
+    script_path.write_text(script, encoding="utf-8-sig")
+    started = QProcess.startDetached("powershell.exe", [
+        "-NoProfile", "-ExecutionPolicy", "Bypass", "-WindowStyle", "Hidden", "-File", str(script_path)])
+    if not started:
+        raise updater.UpdateError("No se pudo iniciar la actualización.")
+    _quit_all()
+
+
+def _quit_all() -> None:
     for widget in QApplication.topLevelWidgets():
         widget.close()
     QApplication.quit()
@@ -201,7 +240,8 @@ class UpdatesDialog(QDialog):
         answer = QMessageBox.question(
             self, "Instalar actualización",
             "El instalador se descargó y su huella SHA-256 fue verificada.\n\n"
-            f"{APP_NAME} se cerrará, se actualizará y se volverá a abrir solo. ¿Continuar?")
+            f"{APP_NAME} se cerrará unos segundos, se actualizará en segundo plano "
+            "(sin ventanas) y se volverá a abrir solo. ¿Continuar?")
         if answer == QMessageBox.Yes:
             try:
                 run_installer(str(path))

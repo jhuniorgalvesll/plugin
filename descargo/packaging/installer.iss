@@ -28,7 +28,9 @@ SolidCompression=yes
 WizardStyle=modern
 CloseApplications=force
 RestartApplications=no
-PrivilegesRequiredOverridesAllowed=dialog
+; Instalación por usuario (AppData\Local\Programs): actualizaciones sin pedir permisos de administrador
+PrivilegesRequired=lowest
+PrivilegesRequiredOverridesAllowed=dialog commandline
 ArchitecturesInstallIn64BitMode=x64compatible
 
 [Languages]
@@ -47,5 +49,20 @@ Name: "{autodesktop}\{#AppName}"; Filename: "{app}\DescarGO.exe"; Tasks: desktop
 
 [Run]
 Filename: "{app}\DescarGO.exe"; Description: "Abrir {#AppName}"; Flags: nowait postinstall skipifsilent
-; Actualización automática (instalación silenciosa desde la app): volver a abrir DescarGO
-Filename: "{app}\DescarGO.exe"; Flags: nowait; Check: WizardSilent
+
+
+[Code]
+// Antes de copiar archivos: cerrar DescarGO si sigue abierto, para que nunca aparezca
+// «Acceso denegado» al reemplazar DescarGO.exe.
+function PrepareToInstall(var NeedsRestart: Boolean): String;
+var
+  ResultCode, Tries: Integer;
+begin
+  Result := '';
+  for Tries := 1 to 3 do
+  begin
+    Exec(ExpandConstant('{sys}\taskkill.exe'), '/F /T /IM DescarGO.exe', '', SW_HIDE,
+         ewWaitUntilTerminated, ResultCode);
+    Sleep(700);
+  end;
+end;
