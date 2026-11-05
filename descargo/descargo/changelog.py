@@ -1,6 +1,13 @@
 """Novedades de cada versión (se muestran en la app y en GitHub Releases)."""
 
 CHANGELOG: list[tuple[str, list[str]]] = [
+    ("1.3.0", [
+        "🔔 Actualizaciones automáticas: cada vez que abres DescarGO revisa si hay una versión "
+        "nueva y te pregunta si quieres instalarla ahora (se descarga y verifica sola).",
+        "🔑 Licencias: el plan gratuito permite 10 descargas por día. Con una licencia las "
+        "descargas son ilimitadas. Obtén la tuya desde «Licencia» en la barra lateral.",
+        "📊 La barra lateral muestra cuántas descargas gratuitas te quedan hoy.",
+    ]),
     ("1.2.2", [
         "🎵 TikTok vuelve a funcionar: DescarGO ahora se presenta como un navegador real "
         "(Chrome/Safari), como exige TikTok. Antes fallaba con «Unexpected response from "

@@ -26,6 +26,8 @@ from ..core.security import VERDICT_LABELS
 from ..utils import extract_urls, find_ffmpeg_dir, human_size
 from .dialogs import AboutDialog, CoffeeDialog, SettingsDialog
 from .options_dialog import OptionsDialog
+from ..core.licensing import FREE_DAILY_LIMIT, LicenseManager
+from .license_dialog import LicenseDialog, LicenseGeneratorDialog
 from .updates_dialog import UpdatesDialog, check_and_install_engine
 from .widgets import AnalyzingItem, DownloadItem, app_icon, brand_label, logo_pixmap
 from .workers import AnalyzeWorker, DownloadWorker, TaskWorker
@@ -47,6 +49,7 @@ class MainWindow(QMainWindow):
         super().__init__()
         self.settings = settings
         self.library = library
+        self.licenses = LicenseManager()
         self.setWindowTitle(f"{APP_NAME} — {APP_TAGLINE}")
         self.resize(1040, 720)
         self.setMinimumSize(820, 560)
@@ -98,6 +101,10 @@ class MainWindow(QMainWindow):
 
         QGuiApplication.clipboard().dataChanged.connect(self._clipboard_changed)
         QShortcut(QKeySequence.Paste, self, activated=self._paste_shortcut)
+        private_key = self.licenses.private_key()
+        if private_key:  # solo en el computador del autor
+            QShortcut(QKeySequence("Ctrl+Shift+L"), self,
+                      activated=lambda: LicenseGeneratorDialog(private_key, self).exec())
 
     # -- construcción ----------------------------------------------------------
     def _sidebar(self) -> QFrame:
@@ -133,9 +140,27 @@ class MainWindow(QMainWindow):
         self.nav_updates.clicked.connect(self.open_updates)
         nav_about = self._nav_button("ⓘ   Acerca de")
         nav_about.clicked.connect(lambda: AboutDialog(self).exec())
-        for b in (self.nav_downloads, self.nav_history, nav_settings, self.nav_updates, nav_about):
+        self.nav_license = self._nav_button("🔑   Licencia")
+        self.nav_license.clicked.connect(lambda: self.open_license())
+        nav_gen = None
+        private_key = self.licenses.private_key()
+        if private_key:  # solo en el computador del autor (tiene la llave privada)
+            nav_gen = self._nav_button("🛠   Generar licencias")
+            nav_gen.clicked.connect(lambda: LicenseGeneratorDialog(private_key, self).exec())
+        for b in (self.nav_downloads, self.nav_history, nav_settings, self.nav_updates,
+                  self.nav_license, nav_about):
             lay.addWidget(b)
+        if nav_gen:
+            lay.addWidget(nav_gen)
         lay.addStretch(1)
+
+        self.plan_label = QLabel("")
+        self.plan_label.setObjectName("PlanBadge")
+        self.plan_label.setWordWrap(True)
+        self.plan_label.setCursor(Qt.PointingHandCursor)
+        self.plan_label.mousePressEvent = lambda _e: self.open_license()
+        lay.addWidget(self.plan_label)
+        lay.addSpacing(8)
 
         shield = QLabel("🛡  Cada descarga se analiza contra virus y malware")
         shield.setObjectName("SidebarNote")
@@ -406,7 +431,22 @@ class MainWindow(QMainWindow):
             self.enqueue(dialog.requests, batch=info.is_playlist)
 
     # -- cola de descargas -------------------------------------------------------
+    def _free_slots(self) -> int | None:
+        """Descargas que aún caben hoy en el plan gratuito (None = ilimitado)."""
+        remaining = self.licenses.remaining_today()
+        if remaining is None:
+            return None
+        return max(0, remaining - len(self.workers))
+
     def enqueue(self, requests: list[DownloadRequest], batch: bool = False) -> None:
+        slots = self._free_slots()
+        if slots is not None and slots <= 0:
+            self.open_license(limit_reached=True)
+            return
+        limited = 0
+        if slots is not None and len(requests) > slots:
+            limited = len(requests) - slots
+            requests = requests[:slots]
         added = 0
         for index, req in enumerate(requests):
             previous = self.library.find_completed(req.url, req.quality_key)
@@ -436,6 +476,11 @@ class MainWindow(QMainWindow):
         if batch and skipped:
             self.statusBar().showMessage(
                 f"{added} en cola · {skipped} omitidos porque ya estaban descargados.", 8000)
+        if limited:
+            QMessageBox.information(
+                self, "Plan gratuito",
+                f"Se agregaron {added} descargas. Las otras {limited} superan el límite gratuito "
+                f"de {FREE_DAILY_LIMIT} por día.\n\nActiva una licencia para descargar sin límites.")
         self.show_page(0)
         self._update_counts()
 
@@ -487,6 +532,8 @@ class MainWindow(QMainWindow):
                 size=result.total_size, status=result.status,
                 verdict=result.verdict if result.reports else "")
         if result.status == STATUS_DONE:
+            self.licenses.record_download()
+            self._update_plan()
             self.statusBar().showMessage(f"✅ «{req.title}» descargado y verificado.", 6000)
             self.notify("✅ Descarga lista", f"{req.title}\nVerificada: sin amenazas.")
         elif result.status == STATUS_THREAT:
@@ -502,6 +549,9 @@ class MainWindow(QMainWindow):
     def resume_job(self, job_id: str) -> None:
         item = self.items.get(job_id)
         if item and job_id not in self.workers:
+            if self._free_slots() == 0:
+                self.open_license(limit_reached=True)
+                return
             self._start_worker(item.request)
 
     def cancel_job(self, job_id: str) -> None:
@@ -652,7 +702,8 @@ class MainWindow(QMainWindow):
 
     def _startup_checks(self) -> None:
         today = date.today().isoformat()
-        if self.settings.check_app_updates and self.settings.last_app_check != today:
+        self._update_plan()
+        if self.settings.check_app_updates:  # en cada inicio
             worker = self._run_task(TaskWorker(updater.check_app_update))
             worker.signals.finished.connect(self._app_update_found)
         if self.settings.auto_update_engine and self.settings.last_engine_check != today:
@@ -671,6 +722,44 @@ class MainWindow(QMainWindow):
         self.banner.show()
         self.nav_updates.setText("🔄   Actualizaciones  ●")
         self.notify("🎉 Nueva versión disponible", f"{APP_NAME} {update.version} ya está lista para instalar.")
+        self._ask_update(update)
+
+    def _ask_update(self, update) -> None:
+        """Pregunta al abrir la app si se instala la nueva versión."""
+        box = QMessageBox(self)
+        box.setWindowTitle("Actualización disponible")
+        box.setIconPixmap(logo_pixmap(56))
+        box.setText(f"<b>¡Hay una nueva versión de {APP_NAME}!</b><br>"
+                    f"Versión {update.version} (tienes la {APP_VERSION}).")
+        from ..changelog import notes_for
+        notes = notes_for(update.version) or [l.lstrip("- ").strip() for l in update.notes.splitlines()
+                                              if l.strip().startswith("-")]
+        box.setInformativeText("\n".join(f"• {n}" for n in notes[:5]) or "Mejoras y correcciones.")
+        now = box.addButton("Actualizar ahora", QMessageBox.AcceptRole)
+        box.addButton("Más tarde", QMessageBox.RejectRole)
+        skip = box.addButton("Omitir esta versión", QMessageBox.DestructiveRole)
+        box.setDefaultButton(now)
+        box.exec()
+        if box.clickedButton() is now:
+            dialog = UpdatesDialog(self.settings, self, known_update=update)
+            QTimer.singleShot(200, dialog.install_app)
+            dialog.exec()
+        elif box.clickedButton() is skip:
+            self._skip_update()
+
+    def _update_plan(self) -> None:
+        lm = self.licenses
+        if lm.licensed:
+            self.plan_label.setText(f"✅ Licencia activa\n{lm.license.name}")
+            self.nav_license.setText("🔑   Licencia")
+        else:
+            left = lm.remaining_today()
+            self.plan_label.setText(f"Plan gratuito · {left}/{FREE_DAILY_LIMIT} hoy\nToca para obtener licencia")
+            self.nav_license.setText("🔑   Obtener licencia")
+
+    def open_license(self, limit_reached: bool = False) -> None:
+        LicenseDialog(self.licenses, self, limit_reached=limit_reached).exec()
+        self._update_plan()
 
     def _skip_update(self) -> None:
         if self.app_update:

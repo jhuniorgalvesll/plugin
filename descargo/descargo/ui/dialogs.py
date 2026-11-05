@@ -45,7 +45,7 @@ class CoffeeDialog(QDialog):
         title.setObjectName("DialogTitle")
         root.addWidget(title)
         root.addWidget(_wrap(
-            f"{APP_NAME} es gratis y sin límites. Si te es útil, puedes apoyar su desarrollo "
+            f"{APP_NAME} tiene un plan gratuito de 10 descargas por día. Si te es útil, puedes apoyar su desarrollo "
             f"con un café vía <b>Yape</b>. ¡Cualquier monto ayuda y se agradece muchísimo!", muted=True))
 
         card = QFrame()

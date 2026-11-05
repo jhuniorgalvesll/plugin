@@ -3,7 +3,7 @@
 </p>
 
 <h1 align="center">DescarGO</h1>
-<p align="center"><b>Descarga y listo</b> — video y audio de cualquier página pública, seguro y sin límites.</p>
+<p align="center"><b>Descarga y listo</b> — video y audio de cualquier página pública, rápido y seguro.</p>
 <p align="center">© 2026 <a href="https://lliuya.pe">lliuya.pe</a> — Todos los derechos reservados</p>
 
 ---
@@ -15,7 +15,7 @@
 | 🌐 **Fuentes** | YouTube, Facebook, Facebook Reels, Instagram, TikTok, Vimeo, X, Twitch, Reddit, SoundCloud… más de 1.800 sitios, además de un detector genérico para páginas con video y enlaces directos `.mp4` / `.mp3`. |
 | 🎬🎵 **Tú eliges** | Antes de descargar: **video o solo audio**, la **calidad** (solo se muestran las que existen de verdad: 8K, 4K, 2K, 1080p 60fps, HDR…), el formato y los subtítulos. |
 | 🎵 **Audio** | Original sin recomprimir (recomendado), MP3, M4A, OPUS, OGG, FLAC y WAV, a 320, 256, 192 o 128 kbps. |
-| 📋 **Sin límites** | Sin tope diario, sin límite de playlists, sin licencia ni publicidad. Cola con pausa, reanudación y cancelación. |
+| 🔑 **Planes** | **Gratis:** 10 descargas por día. **Con licencia:** ilimitadas. Cola con pausa, reanudación y cancelación, sin publicidad. |
 | 📚 **Listas y perfiles** | Marca qué elementos de una lista quieres. Lo que ya descargaste se omite (descarga incremental). |
 | 🛡️ **Seguridad** | Cada archivo pasa por cuarentena y un análisis de 5 capas antes de llegar a tu carpeta. |
 | 🚫 **Uso responsable** | Bloquea páginas de pago (Netflix, Disney+, Spotify, Udemy, OnlyFans…) y contenido con DRM. |
@@ -73,6 +73,15 @@ Pruebas automáticas:
 2. Sube el cambio a GitHub.
 
 GitHub ejecuta las pruebas, compila el instalador y, si esa versión todavía no está publicada, la publica en **Releases** con su `.exe` y su `.sha256`. Los usuarios reciben el aviso de actualización dentro de la app.
+
+## 🔑 Licencias
+
+- **Plan gratuito:** 10 descargas completadas por día (las fallidas o canceladas no cuentan).
+- **Licencia:** descargas ilimitadas. Va ligada al **código de equipo** del cliente y está firmada digitalmente (Ed25519): no se puede falsificar ni usar en otro computador.
+
+**Vender una licencia:** el cliente abre **Licencia** en la app, copia su código de equipo y te lo envía con la captura del Yape. Tú abres **🛠 Generar licencias** (solo aparece en tu computador), escribes nombre, código y duración, y le envías la clave `DGO1-…`.
+
+> La llave privada (`descargo-licencias.key`) va en `%APPDATA%\DescarGO\` **solo en tu computador**. Nunca la subas a GitHub ni la compartas: con ella cualquiera podría crear licencias.
 
 ## 📁 Estructura
 

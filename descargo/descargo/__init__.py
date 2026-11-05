@@ -1,4 +1,4 @@
-"""DescarGO — Descargador de video y audio, seguro y sin límites.
+"""DescarGO — Descargador de video y audio, seguro.
 
 © lliuya.pe — Todos los derechos reservados.
 """
@@ -6,7 +6,7 @@
 from datetime import date
 
 APP_NAME = "DescarGO"
-APP_VERSION = "1.2.2"
+APP_VERSION = "1.3.0"
 APP_TAGLINE = "Descarga y listo"
 APP_ID = "pe.lliuya.descargo"
 

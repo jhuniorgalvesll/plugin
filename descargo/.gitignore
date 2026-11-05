@@ -8,3 +8,7 @@ dist/
 # Binarios de FFmpeg: se descargan y verifican al compilar (build_windows.ps1)
 descargo/bin/*
 !descargo/bin/.gitkeep
+
+# Llave privada de licencias: NUNCA al repositorio
+*.key
+*.pem
