@@ -29,7 +29,7 @@ from .. import APP_VERSION
 from ..utils import app_data_dir
 
 PYPI_URL = "https://pypi.org/pypi/yt-dlp/json"
-GITHUB_REPO = "jhuniorgalvesll/inicio"
+GITHUB_REPO = "jhuniorgalvesll/plugin"
 RELEASES_URL = f"https://api.github.com/repos/{GITHUB_REPO}/releases?per_page=30"
 RELEASES_PAGE = f"https://github.com/{GITHUB_REPO}/releases"
 TAG_PREFIX = "descargo-v"

@@ -40,7 +40,7 @@ Las capas 1 a 3 y el bloqueo de páginas de pago **no se pueden desactivar**. Si
 
 ## 💻 Instalar en Windows
 
-**Opción A, descargar la versión publicada:** entra a [**Releases**](https://github.com/jhuniorgalvesll/inicio/releases) y descarga `DescarGO-Setup-X.Y.Z.exe`. También puedes bajar la compilación más reciente desde **Actions → «DescarGO — compilar para Windows»** → `DescarGO-Setup-Windows`.
+**Opción A, descargar la versión publicada:** entra a [**Releases**](https://github.com/jhuniorgalvesll/plugin/releases) y descarga `DescarGO-Setup-X.Y.Z.exe`. También puedes bajar la compilación más reciente desde **Actions → «DescarGO — compilar para Windows»** → `DescarGO-Setup-Windows`.
 
 **Opción B, compilar tú mismo:** con [Python 3.12](https://www.python.org/downloads/) instalado, abre PowerShell en la carpeta `descargo`:
 
