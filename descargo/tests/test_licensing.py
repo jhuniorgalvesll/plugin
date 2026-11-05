@@ -143,3 +143,13 @@ def test_summarize_clients_status_and_payments():
     assert clients["Caro"].status() == ("permanent", None)
     old = summarize_clients(entries[:1])[0]
     assert old.status()[0] == "expired"
+
+
+def test_install_author_key_from_pasted_text(tmp_path, keypair):
+    lm = LicenseManager(tmp_path)
+    one_line = " ".join(keypair.split())          # pegado en una sola línea
+    assert lm.install_author_key_text("  " + one_line + "  ") and lm.is_author
+    other = LicenseManager(tmp_path / "x") if (tmp_path / "x").mkdir() is None else None
+    fake = ECC.generate(curve="ed25519").export_key(format="PEM")
+    assert not other.install_author_key_text(fake)
+    assert not other.install_author_key_text("hola")

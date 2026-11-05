@@ -122,9 +122,12 @@ class LicenseDialog(QDialog):
         if m.licensed:
             self.status.setText(f"✅ <b>Licencia activa</b> — {m.license.summary}<br>"
                                 "Alta calidad desbloqueada (HD, 4K, audio 320 kbps). ¡Gracias por tu apoyo! 💜")
-            self.key_input.hide()
+            # el recuadro sigue disponible para que el administrador pegue su llave
+            self.key_input.show()
+            self.key_input.setPlaceholderText("Administrador: pega aquí tu llave (empieza con "
+                                              "-----BEGIN PRIVATE…) y presiona «Activar».")
             self.how.hide()
-            self.btn_activate.hide()
+            self.btn_activate.show()
             self.btn_remove.show()
         else:
             if m.expired_license:
@@ -137,6 +140,16 @@ class LicenseDialog(QDialog):
             self.how.show()
             self.btn_activate.show()
             self.btn_remove.hide()
+
+    def _install_admin_text(self, text: str) -> None:
+        if self.manager.install_author_key_text(text):
+            self.key_input.clear()
+            QMessageBox.information(self, "Administrador activado",
+                                    "👑 ¡Listo! Este computador ahora es el del administrador:\n"
+                                    "todo ilimitado y botón «👑 Administrador» en la barra lateral.")
+            self._refresh()
+        else:
+            QMessageBox.warning(self, "Llave no válida", "Ese texto no es la llave de licencias de DescarGO.")
 
     def _load_author_key(self) -> None:
         path, _ = QFileDialog.getOpenFileName(self, "Selecciona tu llave de licencias", "",
@@ -158,6 +171,10 @@ class LicenseDialog(QDialog):
         QTimer.singleShot(2000, lambda: self.btn_copy.setText("📋 Copiar"))
 
     def _activate(self) -> None:
+        text = self.key_input.toPlainText()
+        if "PRIVATE KEY" in text:  # el administrador pegó su llave en vez de una licencia
+            self._install_admin_text(text)
+            return
         try:
             lic = self.manager.activate(self.key_input.toPlainText())
         except LicenseError as exc:

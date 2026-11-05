@@ -247,7 +247,20 @@ class LicenseManager:
     def install_author_key(self, source: Path | str) -> bool:
         """Copia la llave del autor a la carpeta de datos, solo si es la llave REAL."""
         try:
-            pem = Path(source).read_text(encoding="utf-8")
+            return self.install_author_key_text(Path(source).read_text(encoding="utf-8"))
+        except (OSError, UnicodeDecodeError):
+            return False
+
+    def install_author_key_text(self, pem: str) -> bool:
+        """Igual que install_author_key, pero con el texto de la llave pegado."""
+        pem = (pem or "").strip()
+        if "PRIVATE KEY" not in pem:
+            return False
+        # tolera que se pegue en una sola línea o con espacios extra
+        begin, end = "-----BEGIN " + "PRIVATE KEY-----", "-----END " + "PRIVATE KEY-----"
+        body = "".join(pem.replace(begin, "").replace(end, "").split())
+        pem = begin + "\n" + body + "\n" + end + "\n"
+        try:
             from Cryptodome.PublicKey import ECC
             if ECC.import_key(pem).public_key() != ECC.import_key(PUBLIC_KEY_PEM):
                 return False

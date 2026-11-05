@@ -1,6 +1,10 @@
 """Novedades de cada versión (se muestran en la app y en GitHub Releases)."""
 
 CHANGELOG: list[tuple[str, list[str]]] = [
+    ("1.5.1", [
+        "👑 Activar el modo administrador es más fácil: pega el texto de tu llave en el recuadro "
+        "de la ventana Licencia y presiona «Activar» (ya no hace falta buscar el archivo).",
+    ]),
     ("1.5.0", [
         "👑 Panel de administrador: lista de clientes con el estado de su licencia (activa, por "
         "vencer, vencida o permanente), buscador e ingresos registrados.",
