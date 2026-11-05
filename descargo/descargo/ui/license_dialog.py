@@ -12,7 +12,7 @@ from PySide6.QtWidgets import (QAbstractItemView, QComboBox, QDateEdit, QDialog,
                                QTableWidgetItem, QTabWidget, QVBoxLayout, QWidget)
 
 from .. import APP_NAME, AUTHOR_HANDLE, AUTHOR_INSTAGRAM, YAPE_NUMBER_DISPLAY
-from ..core.licensing import (STANDARD_MAX_KBPS, STANDARD_MAX_RES, LicenseError, LicenseManager, add_months, summarize_clients,
+from ..core.licensing import (STANDARD_MAX_KBPS, STANDARD_MAX_RES, LicenseError, LicenseManager, _new_license_id, add_months, summarize_clients,
                               create_license, machine_code)
 
 
@@ -198,7 +198,7 @@ class LicenseGeneratorDialog(QDialog):
     """
 
     STATUS_TEXT = {"permanent": "♾️ Permanente", "active": "✅ Activa",
-                   "expiring": "⚠️ Vence pronto", "expired": "❌ Vencida"}
+                   "expiring": "⚠️ Vence pronto", "expired": "❌ Vencida", "revoked": "🚫 Anulada"}
 
     def __init__(self, manager: LicenseManager, parent: QWidget | None = None):
         super().__init__(parent)
@@ -270,23 +270,35 @@ class LicenseGeneratorDialog(QDialog):
         copy.clicked.connect(self._copy_client_license)
         renew = QPushButton("🔄  Renovar")
         renew.clicked.connect(self._renew_selected)
+        self.btn_revoke = QPushButton("🚫  Anular / Reactivar")
+        self.btn_revoke.clicked.connect(self._toggle_revoke)
         actions.addWidget(copy)
         actions.addWidget(renew)
+        actions.addWidget(self.btn_revoke)
         lay.addLayout(actions)
+
+        pub = QHBoxLayout()
+        pub.addWidget(_label("Para que las anulaciones lleguen a los clientes, publica el archivo "
+                             "en tu GitHub.", muted=True), 1)
+        exp = QPushButton("📤  Exportar lista de anulaciones…")
+        exp.clicked.connect(self._export_revocations)
+        pub.addWidget(exp)
+        lay.addLayout(pub)
         return page
 
     def _all_clients(self):
-        return summarize_clients(self.manager.issued())
+        return summarize_clients(self.manager.issued(), self.manager.revoked_set())
 
     def _load_clients(self) -> None:
         clients = self._all_clients()
-        counts = {"permanent": 0, "active": 0, "expiring": 0, "expired": 0}
+        counts = {"permanent": 0, "active": 0, "expiring": 0, "expired": 0, "revoked": 0}
         for c in clients:
             counts[c.status()[0]] += 1
         total = sum(c.total_paid for c in clients)
         self.summary.setText(
             f"<b>{len(clients)}</b> clientes · ✅ {counts['active'] + counts['permanent']} activos · "
             f"⚠️ {counts['expiring']} por vencer · ❌ {counts['expired']} vencidos · "
+            f"🚫 {counts['revoked']} anulados · "
             f"💰 Ingresos registrados: <b>S/ {total:,.2f}</b>  ·  Tú: 👑 administrador ilimitado")
         text = self.search.text().strip().lower() if hasattr(self, "search") else ""
         shown = [c for c in clients if not text or text in c.name.lower() or text in c.machine.lower()]
@@ -320,6 +332,55 @@ class LicenseGeneratorDialog(QDialog):
         if client:
             QGuiApplication.clipboard().setText(client.last_key)
             QMessageBox.information(self, "Copiada", f"Se copió la licencia de {client.name}.")
+
+    def _toggle_revoke(self) -> None:
+        client = self._selected_client()
+        if not client:
+            return
+        if not client.ids:
+            QMessageBox.information(self, "Sin identificador",
+                                   "Esta licencia es antigua y no se puede anular a distancia. "
+                                   "Genérale una licencia nueva y esa sí podrá anularse.")
+            return
+        revoked = self.manager.revoked_set()
+        if client.revoked:
+            if QMessageBox.question(self, "Reactivar cliente",
+                                    f"¿Reactivar la licencia de {client.name}?") != QMessageBox.Yes:
+                return
+            revoked -= set(client.ids)
+        else:
+            if QMessageBox.warning(self, "Anular licencia",
+                                   f"¿Anular la licencia de {client.name} ({client.machine})?\n\n"
+                                   "Volverá a calidad estándar la próxima vez que se conecte a internet. "
+                                   "Recuerda publicar la lista de anulaciones en GitHub.",
+                                   QMessageBox.Yes | QMessageBox.No, QMessageBox.No) != QMessageBox.Yes:
+                return
+            revoked |= set(client.ids)
+        self.manager.set_revoked(revoked)
+        self._load_clients()
+        self._export_revocations(ask=False)
+
+    def _export_revocations(self, ask: bool = True) -> None:
+        from ..core.revocation import build_revocation_file
+        content = build_revocation_file(self.private_key, list(self.manager.revoked_set()))
+        path = self.manager.folder / "revocaciones.json"
+        try:
+            path.write_text(content, encoding="utf-8")
+        except OSError as exc:
+            QMessageBox.warning(self, "No se pudo guardar", str(exc))
+            return
+        box = QMessageBox(self)
+        box.setWindowTitle("Lista de anulaciones")
+        box.setText("Se guardó <b>revocaciones.json</b>.")
+        box.setInformativeText(
+            "Para que las anulaciones lleguen a tus clientes, sube este archivo a tu repositorio "
+            "de GitHub (jhuniorgalvesll/plugin), en la raíz, con el nombre <b>revocaciones.json</b>.\n\n"
+            "Mientras no lo subas, los cambios solo valen en tu computador.")
+        openf = box.addButton("📂 Abrir carpeta", QMessageBox.AcceptRole)
+        box.addButton("Entendido", QMessageBox.RejectRole)
+        box.exec()
+        if box.clickedButton() is openf:
+            QDesktopServices.openUrl(QUrl.fromLocalFile(str(self.manager.folder)))
 
     # -- nueva licencia / renovar -----------------------------------------------------
     def _new_tab(self) -> QWidget:
@@ -422,8 +483,9 @@ class LicenseGeneratorDialog(QDialog):
         exp = self._expiry()
         expires = exp.isoformat() if exp else None
         name = self.name.text().strip() or "Usuario"
+        lid = _new_license_id()
         try:
-            key = create_license(self.private_key, name, self.machine.text(), expires)
+            key = create_license(self.private_key, name, self.machine.text(), expires, lid=lid)
         except Exception as exc:
             QMessageBox.warning(self, "No se pudo generar", str(exc))
             return
@@ -431,7 +493,7 @@ class LicenseGeneratorDialog(QDialog):
         self.btn_copy.setEnabled(True)
         self.btn_msg.setEnabled(True)
         self.manager.log_issued(name, self.machine.text().strip().upper(), expires, key,
-                                self.amount.value(), self.note.text().strip())
+                                self.amount.value(), self.note.text().strip(), lid=lid)
         self._load_clients()
 
     def _copy(self) -> None:

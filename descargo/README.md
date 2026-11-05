@@ -111,6 +111,18 @@ descargo/
 
 Los ajustes, el historial y la cuarentena se guardan en `%APPDATA%\DescarGO` (Windows), `~/Library/Application Support/DescarGO` (Mac) o `~/.config/descargo` (Linux).
 
+## 🔐 Protección contra copias
+
+DescarGO no se puede volver 100 % imposible de copiar (ningún programa de escritorio lo es), pero sube bastante el muro:
+
+- **Licencias atadas al equipo:** cada licencia solo vale en el código de equipo del cliente. Copiar la carpeta a otra PC no sirve.
+- **Firma digital (Ed25519):** las licencias y la lista de anulaciones están firmadas con tu llave privada. Nadie puede fabricarlas sin ella; la app solo trae la llave pública.
+- **Anulación a distancia:** el administrador puede anular una licencia (robada, compartida o no pagada) desde el panel. Publica `revocaciones.json` en el repositorio de GitHub y, cuando el cliente se conecte, su licencia deja de valer y vuelve a calidad estándar. Si no hay internet, no se bloquea a nadie por error.
+- **Sin código fuente a la vista:** el instalador no incluye los archivos `.py` legibles.
+- **Ofuscación opcional:** `build_windows.ps1` puede ofuscar el código con PyArmor si pones `DESCARGO_OBFUSCATE=1` (requiere una licencia de pago de PyArmor).
+
+**Anular una licencia:** en el panel, selecciona al cliente → «🚫 Anular / Reactivar» → «📤 Exportar lista de anulaciones» → sube el archivo `revocaciones.json` a tu repositorio (en la raíz).
+
 ## ⚖️ Uso responsable
 
 DescarGO está pensado para descargar **contenido propio, con licencia libre o con permiso de su autor**. No descarga contenido de pago ni evade protecciones DRM. Respeta los términos de cada plataforma y los derechos de autor; el usuario es responsable del uso de los archivos descargados.

@@ -34,6 +34,21 @@ if (-not (Test-Path "$bin\ffmpeg.exe")) {
     Copy-Item "$($dir.FullName)\bin\ffprobe.exe" $bin
 }
 
+# Ofuscación opcional del código (requiere licencia de pago de PyArmor):
+# instala pyarmor, registra tu licencia y pon $env:DESCARGO_OBFUSCATE = "1".
+if ($env:DESCARGO_OBFUSCATE -eq "1") {
+    Write-Host "==> Ofuscando el código con PyArmor" -ForegroundColor Cyan
+    & .\.venv\Scripts\pip.exe install -q pyarmor
+    Remove-Item -Recurse -Force build\obf -ErrorAction SilentlyContinue
+    & .\.venv\Scripts\pyarmor.exe gen -O build\obf --recursive descargo
+    if ($LASTEXITCODE -eq 0) {
+        Copy-Item -Recurse -Force build\obf\descargo\* descargo\
+        Write-Host "    Código ofuscado." -ForegroundColor Green
+    } else {
+        Write-Host "    PyArmor no pudo ofuscar (¿licencia?). Se compila sin ofuscar." -ForegroundColor Yellow
+    }
+}
+
 Write-Host "==> Ejecutando pruebas" -ForegroundColor Cyan
 & .\.venv\Scripts\python.exe -m pytest -q tests
 

@@ -1,6 +1,14 @@
 """Novedades de cada versión (se muestran en la app y en GitHub Releases)."""
 
 CHANGELOG: list[tuple[str, list[str]]] = [
+    ("1.6.0", [
+        "🔐 Más seguridad contra copias: cada licencia lleva un identificador único y el "
+        "administrador puede ANULAR a distancia una licencia robada, compartida o no pagada.",
+        "🚫 En el panel: botón «Anular / Reactivar» y «Exportar lista de anulaciones» para "
+        "publicarla en GitHub. Los clientes la reciben y vuelven a calidad estándar.",
+        "🛡 La lista de anulaciones está firmada: nadie puede falsificarla ni «desanularse». "
+        "Si no hay internet, no se bloquea a nadie por error.",
+    ]),
     ("1.5.1", [
         "👑 Activar el modo administrador es más fácil: pega el texto de tu llave en el recuadro "
         "de la ventana Licencia y presiona «Activar» (ya no hace falta buscar el archivo).",

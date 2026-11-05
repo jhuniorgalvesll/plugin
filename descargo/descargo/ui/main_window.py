@@ -690,6 +690,27 @@ class MainWindow(QMainWindow):
         if self.settings.auto_update_engine and self.settings.last_engine_check != today:
             worker = self._run_task(TaskWorker(check_and_install_engine))
             worker.signals.finished.connect(self._engine_updated)
+        self._check_revocations()
+        self._revocation_timer = QTimer(self)
+        self._revocation_timer.timeout.connect(self._check_revocations)
+        self._revocation_timer.start(3 * 60 * 60 * 1000)  # cada 3 horas
+
+    def _check_revocations(self) -> None:
+        if self.licenses.is_author or self.licenses.license is None:
+            return  # el administrador no se anula a sí mismo
+        from ..core.revocation import fetch_revoked_ids
+        worker = self._run_task(TaskWorker(fetch_revoked_ids))
+        worker.signals.finished.connect(self._revocations_fetched)
+
+    def _revocations_fetched(self, revoked_ids) -> None:
+        was_ok = not self.licenses.is_revoked
+        if self.licenses.apply_revoked_ids(revoked_ids) and was_ok:
+            self._update_plan()
+            QMessageBox.warning(
+                self, "Licencia anulada",
+                "Tu licencia de DescarGO fue anulada por el administrador.\n\n"
+                "Seguirás descargando en calidad estándar (hasta 480p). "
+                "Si crees que es un error, escribe a " + AUTHOR_HANDLE + ".")
 
     def _check_app_update(self) -> None:
         if self.settings.check_app_updates:
@@ -752,6 +773,9 @@ class MainWindow(QMainWindow):
             self.nav_license.setText("🔑   Licencia")
         elif lm.licensed:
             self.plan_label.setText(f"✅ Licencia activa\n{lm.license.name}")
+            self.nav_license.setText("🔑   Licencia")
+        elif lm.is_revoked:
+            self.plan_label.setText("🚫 Licencia anulada\nCalidad estándar · Toca para ayuda")
             self.nav_license.setText("🔑   Licencia")
         elif lm.expired_license:
             self.plan_label.setText(f"⚠️ Licencia vencida ({lm.expired_license.expires})\n"

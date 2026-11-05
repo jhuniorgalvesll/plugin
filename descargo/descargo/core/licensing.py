@@ -19,7 +19,7 @@ import os
 import platform
 import subprocess
 import uuid
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date, datetime
 from pathlib import Path
 
@@ -88,6 +88,7 @@ class License:
     expires: str | None   # "AAAA-MM-DD" o None = permanente
     issued: str
     key: str = ""
+    lid: str = ""         # identificador único (para anulación)
 
     @property
     def expired(self) -> bool:
@@ -107,12 +108,38 @@ def _b64d(text: str) -> bytes:
     return base64.urlsafe_b64decode(text + "=" * (-len(text) % 4))
 
 
-def _payload_bytes(name: str, machine: str, expires: str | None, issued: str) -> bytes:
+def _new_license_id() -> str:
+    import secrets
+    return secrets.token_hex(6)  # identificador único de la licencia (para poder anularla)
+
+
+def _payload_bytes(name: str, machine: str, expires: str | None, issued: str, lid: str = "") -> bytes:
     data = {"v": 1, "n": name, "m": machine, "e": expires, "i": issued}
+    if lid:
+        data["id"] = lid
     return json.dumps(data, ensure_ascii=False, separators=(",", ":"), sort_keys=True).encode("utf-8")
 
 
-def create_license(private_key_pem: str, name: str, machine: str, expires: str | None = None) -> str:
+def sign_blob(private_key_pem: str, data: bytes) -> str:
+    """Firma cualquier dato con la llave del administrador (Ed25519). Devuelve base64url."""
+    from Cryptodome.PublicKey import ECC
+    from Cryptodome.Signature import eddsa
+    return _b64e(eddsa.new(ECC.import_key(private_key_pem), "rfc8032").sign(data))
+
+
+def verify_blob(data: bytes, signature_b64: str) -> bool:
+    """Comprueba que un dato lo firmó el administrador (con la llave pública incluida)."""
+    from Cryptodome.PublicKey import ECC
+    from Cryptodome.Signature import eddsa
+    try:
+        eddsa.new(ECC.import_key(PUBLIC_KEY_PEM), "rfc8032").verify(data, _b64d(signature_b64))
+        return True
+    except (ValueError, TypeError):
+        return False
+
+
+def create_license(private_key_pem: str, name: str, machine: str, expires: str | None = None,
+                   lid: str | None = None) -> str:
     """Solo para el autor: firma una licencia para un código de equipo."""
     from Cryptodome.PublicKey import ECC
     from Cryptodome.Signature import eddsa
@@ -122,7 +149,9 @@ def create_license(private_key_pem: str, name: str, machine: str, expires: str |
         raise LicenseError("El código de equipo no es válido (debe verse como 7F3A-91C2-0BDE-44A8).")
     if expires:
         datetime.strptime(expires, "%Y-%m-%d")
-    payload = _payload_bytes(name.strip() or "Usuario", machine, expires or None, date.today().isoformat())
+    lid = lid or _new_license_id()
+    payload = _payload_bytes(name.strip() or "Usuario", machine, expires or None,
+                             date.today().isoformat(), lid)
     key = ECC.import_key(private_key_pem)
     signature = eddsa.new(key, "rfc8032").sign(payload)
     return LICENSE_PREFIX + _b64e(payload) + "." + _b64e(signature)
@@ -144,7 +173,8 @@ def verify_license(text: str, machine: str | None = None, allow_expired: bool = 
     except (ValueError, TypeError, KeyError):
         raise LicenseError("La licencia no es válida (firma incorrecta).") from None
     lic = License(name=str(data.get("n", "")), machine=str(data.get("m", "")),
-                  expires=data.get("e"), issued=str(data.get("i", "")), key=text)
+                  expires=data.get("e"), issued=str(data.get("i", "")), key=text,
+                  lid=str(data.get("id", "")))
     if lic.machine != (machine or machine_code()):
         raise LicenseError("Esta licencia pertenece a otro equipo.")
     if lic.expired and not allow_expired:
@@ -178,6 +208,7 @@ class LicenseManager:
         self._usage_file = self.folder / "uso.json"
         self.license: License | None = None
         self._author: bool | None = None
+        self._revoked: set[str] = self._load_revoked()
         self.load()
 
     # -- licencia -------------------------------------------------------------
@@ -189,6 +220,31 @@ class LicenseManager:
                                               allow_expired=True)
             except LicenseError:
                 self.license = None
+
+    # -- anulación (revocación a distancia) -----------------------------------
+    def _load_revoked(self) -> set[str]:
+        path = self.folder / "revocadas_local.json"
+        try:
+            return set(json.loads(path.read_text(encoding="utf-8")))
+        except (OSError, ValueError):
+            return set()
+
+    def apply_revoked_ids(self, revoked_ids: "set[str] | None") -> bool:
+        """Guarda la última lista de anulaciones descargada. True si la licencia activa quedó anulada."""
+        if revoked_ids is None:  # sin conexión: se mantiene lo último que sabíamos
+            return self.is_revoked
+        self._revoked = set(revoked_ids)
+        try:
+            (self.folder / "revocadas_local.json").write_text(
+                json.dumps(sorted(self._revoked)), encoding="utf-8")
+        except OSError:
+            pass
+        return self.is_revoked
+
+    @property
+    def is_revoked(self) -> bool:
+        return (self.license is not None and bool(self.license.lid)
+                and self.license.lid in self._revoked)
 
     def activate(self, text: str) -> License:
         lic = verify_license(text)
@@ -221,10 +277,10 @@ class LicenseManager:
 
     @property
     def licensed(self) -> bool:
-        """Alta calidad habilitada (autor o licencia vigente)."""
+        """Alta calidad habilitada (autor o licencia vigente y no anulada)."""
         if self.is_author:
             return True
-        return self.license is not None and not self.license.expired
+        return self.license is not None and not self.license.expired and not self.is_revoked
 
     @property
     def expired_license(self) -> License | None:
@@ -272,12 +328,23 @@ class LicenseManager:
 
     # -- registro de licencias emitidas (solo autor) ------------------------------
     def log_issued(self, name: str, machine: str, expires: str | None, key: str,
-                   amount: float = 0.0, note: str = "") -> None:
+                   amount: float = 0.0, note: str = "", lid: str = "") -> None:
         entry = {"fecha": datetime.now().isoformat(timespec="seconds"), "nombre": name,
                  "equipo": machine, "vence": expires, "licencia": key,
-                 "monto": round(float(amount or 0), 2), "nota": note}
+                 "monto": round(float(amount or 0), 2), "nota": note, "id": lid}
         with open(self.folder / "licencias_emitidas.jsonl", "a", encoding="utf-8") as fh:
             fh.write(json.dumps(entry, ensure_ascii=False) + "\n")
+
+    # -- anulación de clientes (solo administrador) -------------------------------
+    def revoked_set(self) -> set[str]:
+        try:
+            return set(json.loads((self.folder / "anuladas_admin.json").read_text(encoding="utf-8")))
+        except (OSError, ValueError):
+            return set()
+
+    def set_revoked(self, revoked_ids: set[str]) -> None:
+        (self.folder / "anuladas_admin.json").write_text(
+            json.dumps(sorted(revoked_ids)), encoding="utf-8")
 
     def issued(self) -> list[dict]:
         path = self.folder / "licencias_emitidas.jsonl"
@@ -301,8 +368,12 @@ class Client:
     total_paid: float
     licenses: int
     last_issued: str
+    ids: list[str] = field(default_factory=list)   # todas las licencias de este equipo
+    revoked: bool = False
 
     def status(self, today: date | None = None) -> tuple[str, int | None]:
+        if self.revoked:
+            return "revoked", None
         """(«active» | «expiring» | «expired» | «permanent», días restantes)."""
         if not self.expires:
             return "permanent", None
@@ -315,18 +386,21 @@ class Client:
         return "active", days
 
 
-def summarize_clients(entries: list[dict]) -> list[Client]:
+def summarize_clients(entries: list[dict], revoked_ids: set[str] | None = None) -> list[Client]:
     """Agrupa las licencias emitidas por código de equipo (la más reciente manda)."""
+    revoked_ids = revoked_ids or set()
     clients: dict[str, Client] = {}
     for e in sorted(entries, key=lambda x: str(x.get("fecha", ""))):
         machine = str(e.get("equipo", "")).upper()
         if not machine:
             continue
+        lid = str(e.get("id", ""))
         c = clients.get(machine)
         paid = float(e.get("monto") or 0)
         if c is None:
-            clients[machine] = Client(str(e.get("nombre", "")), machine, e.get("vence"),
-                                      str(e.get("licencia", "")), paid, 1, str(e.get("fecha", "")))
+            c = Client(str(e.get("nombre", "")), machine, e.get("vence"),
+                       str(e.get("licencia", "")), paid, 1, str(e.get("fecha", "")))
+            clients[machine] = c
         else:
             c.name = str(e.get("nombre") or c.name)
             c.expires = e.get("vence")
@@ -334,6 +408,10 @@ def summarize_clients(entries: list[dict]) -> list[Client]:
             c.total_paid += paid
             c.licenses += 1
             c.last_issued = str(e.get("fecha", ""))
+        if lid:
+            c.ids.append(lid)
+    for c in clients.values():
+        c.revoked = bool(c.ids) and all(i in revoked_ids for i in c.ids)
     return sorted(clients.values(), key=lambda c: c.last_issued, reverse=True)
 
 
