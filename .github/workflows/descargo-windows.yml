@@ -1,8 +1,8 @@
 name: DescarGO — compilar para Windows
 
 # - En cada cambio de descargo/**: pruebas + instalador como artefacto.
-# - Al crear una etiqueta «descargo-vX.Y.Z»: además se publica en GitHub Releases,
-#   que es donde la app busca sus actualizaciones.
+# - Si la versión (APP_VERSION) todavía no está publicada, se publica en GitHub
+#   Releases, que es donde la app busca sus actualizaciones.
 on:
   push:
     branches: ["**"]
@@ -61,35 +61,48 @@ jobs:
           name: DescarGO-Portable-Windows
           path: descargo/dist/DescarGO/
 
+  # Publica en GitHub Releases cuando la versión de la app (APP_VERSION) aún no
+  # está publicada. GitHub crea la etiqueta «descargo-vX.Y.Z» en este commit.
   release:
-    if: startsWith(github.ref, 'refs/tags/descargo-v')
     needs: build-windows
     runs-on: ubuntu-latest
     permissions:
       contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - name: Comprobar que la etiqueta coincide con la versión de la app
-        working-directory: descargo
+      - name: Leer versión y comprobar si ya está publicada
+        id: ver
         run: |
-          APP=$(python -c "import re;print(re.search(r'APP_VERSION = \"([^\"]+)\"', open('descargo/__init__.py', encoding='utf-8').read()).group(1))")
-          TAG="${GITHUB_REF_NAME#descargo-v}"
-          echo "App: $APP  Etiqueta: $TAG"
-          test "$APP" = "$TAG"
+          APP=$(python -c "import re;print(re.search(r'APP_VERSION = \"([^\"]+)\"', open('descargo/descargo/__init__.py', encoding='utf-8').read()).group(1))")
+          TAG="descargo-v$APP"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "version=$APP" >> "$GITHUB_OUTPUT"
+          if [[ "$GITHUB_REF" == refs/tags/* && "$GITHUB_REF_NAME" != "$TAG" ]]; then
+            echo "La etiqueta $GITHUB_REF_NAME no coincide con la versión $APP"; exit 1
+          fi
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "publish=false" >> "$GITHUB_OUTPUT"; echo "$TAG ya está publicada."
+          else
+            echo "publish=true" >> "$GITHUB_OUTPUT"
+          fi
       - uses: actions/download-artifact@v4
+        if: steps.ver.outputs.publish == 'true'
         with:
           name: DescarGO-Setup-Windows
           path: release
       - name: Verificar huella SHA-256
+        if: steps.ver.outputs.publish == 'true'
         working-directory: release
         run: sha256sum -c DescarGO-Setup-*.exe.sha256
       - name: Crear la publicación
-        env:
-          GH_TOKEN: ${{ github.token }}
+        if: steps.ver.outputs.publish == 'true'
         run: |
           python descargo/tools/release_notes.py > notes.md
-          gh release create "$GITHUB_REF_NAME" release/* \
-            --title "DescarGO ${GITHUB_REF_NAME#descargo-v}" --notes-file notes.md
+          gh release create "${{ steps.ver.outputs.tag }}" release/* --repo "$GITHUB_REPOSITORY" \
+            --target "$GITHUB_SHA" --title "DescarGO ${{ steps.ver.outputs.version }}" \
+            --notes-file notes.md --latest

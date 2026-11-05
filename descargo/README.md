@@ -70,14 +70,9 @@ Pruebas automáticas:
 ## 🚀 Publicar una versión nueva
 
 1. Sube el número en `descargo/descargo/__init__.py` (`APP_VERSION`) y agrega sus novedades en `descargo/descargo/changelog.py`.
-2. Crea y sube la etiqueta con ese número:
+2. Sube el cambio a GitHub.
 
-```bash
-git tag descargo-v1.2.0
-git push origin descargo-v1.2.0
-```
-
-GitHub compila el instalador, comprueba que la etiqueta coincide con la versión, publica el `.exe` y su `.sha256` en **Releases**, y los usuarios reciben el aviso de actualización dentro de la app.
+GitHub ejecuta las pruebas, compila el instalador y, si esa versión todavía no está publicada, la publica en **Releases** con su `.exe` y su `.sha256`. Los usuarios reciben el aviso de actualización dentro de la app.
 
 ## 📁 Estructura
 
